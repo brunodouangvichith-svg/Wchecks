@@ -73,6 +73,7 @@ MONITORED_COUNTRIES = [
     "NGA", "LBY", "DZA", "AGO", "BRA", "MEX", "CAN", "NOR", "GBR", "FRA",
     "DEU", "ITA", "ESP", "UKR", "TUR", "EGY", "ISR", "IND", "JPN", "KOR",
     "IDN", "AUS", "ZAF", "PAK", "SYR", "YEM", "SDN", "KAZ", "AZE", "TKM",
+    "GRC",
 ]
 
 # --- World Bank : indicateurs suivis ---

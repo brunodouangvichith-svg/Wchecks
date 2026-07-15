@@ -304,6 +304,8 @@ _ALIASES: dict[str, str] = {
     "Azerbaïdjan": "Azerbaijan",
     "Turkménistan": "Turkmenistan",
     "Nigéria": "Nigeria",
+    "Grece": "Greece",
+    "Grèce": "Greece",
 }
 
 COUNTRY_NAME_TO_ISO3: dict[str, str] = {name: iso3 for name, (iso3, _, _) in _COUNTRIES.items()}
