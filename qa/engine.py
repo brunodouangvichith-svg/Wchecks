@@ -85,6 +85,24 @@ def _handle_industry(cur, iso3: str) -> str | None:
     return f"la production industrielle représentait {float(row[1]):g}% du PIB en {row[0]}"
 
 
+def _handle_credit_rating(cur, iso3: str) -> str | None:
+    cur.execute(
+        "SELECT agence, note, perspective, date_notation FROM credit_ratings "
+        "WHERE pays_code=%s ORDER BY agence",
+        (iso3,),
+    )
+    ratings = cur.fetchall()
+    if not ratings:
+        return None
+    parts = [
+        f"{agence} : {note or '?'} (perspective {perspective or '?'}, "
+        f"dernière mise à jour de cette notation : "
+        f"{date_n.strftime('%d/%m/%Y') if date_n else 'date inconnue'})"
+        for agence, note, perspective, date_n in ratings
+    ]
+    return "notations de crédit souveraines — " + "; ".join(parts)
+
+
 def _handle_risk(cur, iso3: str) -> str | None:
     cur.execute(
         "SELECT score_global, date_calcul FROM risk_scores "
@@ -170,9 +188,10 @@ DIMENSION_KEYWORDS: list[tuple[list[str], object]] = [
     (["industrie", "industriel"], _handle_industry),
     (["risque"], _handle_risk),
     (["conflit", "tension", "guerre", "attaque"], _handle_conflicts),
+    (["notation", "credit", "crédit", "s&p", "moody", "fitch"], _handle_credit_rating),
 ]
 
-_DEFAULT_HANDLERS = [_handle_economy, _handle_debt, _handle_risk]
+_DEFAULT_HANDLERS = [_handle_economy, _handle_debt, _handle_credit_rating, _handle_risk]
 
 
 def answer_question(question: str) -> str:

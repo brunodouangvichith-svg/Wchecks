@@ -182,6 +182,21 @@ CREATE TABLE IF NOT EXISTS minerals_production (
     UNIQUE (pays_code, annee, matiere_premiere)
 );
 
+-- Notations de crédit souveraines (S&P, Fitch, Moody's) — scrapées depuis Wikipédia
+-- (Liste of countries by credit rating), pas d'API gratuite fiable disponible.
+-- Une ligne par (pays, agence) : reflète la notation ACTUELLE, pas un historique —
+-- réécrite à chaque collecte si elle a changé.
+CREATE TABLE IF NOT EXISTS credit_ratings (
+    id BIGSERIAL PRIMARY KEY,
+    pays_code TEXT NOT NULL,
+    agence TEXT NOT NULL,
+    note TEXT,
+    perspective TEXT,
+    date_notation DATE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (pays_code, agence)
+);
+
 -- Score de risque global, calculé par croisement des dimensions ci-dessus
 CREATE TABLE IF NOT EXISTS risk_scores (
     id BIGSERIAL PRIMARY KEY,

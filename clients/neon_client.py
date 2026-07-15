@@ -47,6 +47,7 @@ TABLE_COLUMNS = {
     "country_industry": ["pays_code", "annee", "production_industrielle_pct_pib"],
     "minerals_production": ["pays_code", "annee", "matiere_premiere", "volume_tonnes", "rang_mondial"],
     "risk_scores": ["pays_code", "date_calcul", "score_global", "details_json"],
+    "credit_ratings": ["pays_code", "agence", "note", "perspective", "date_notation"],
 }
 
 # Colonnes formant la contrainte UNIQUE de chaque table (voir db/schema.sql).
@@ -67,6 +68,7 @@ TABLE_CONFLICT_KEYS = {
     "country_industry": ["pays_code", "annee"],
     "minerals_production": ["pays_code", "annee", "matiere_premiere"],
     "risk_scores": ["pays_code", "date_calcul"],
+    "credit_ratings": ["pays_code", "agence"],
 }
 
 # Champ utilisé pour trier "le plus récent d'abord" dans get_latest()/get_history().
@@ -87,6 +89,7 @@ ORDER_FIELD = {
     "country_industry": "annee",
     "minerals_production": "annee",
     "risk_scores": "date_calcul",
+    "credit_ratings": "date_notation",
 }
 
 _pool: ConnectionPool | None = None

@@ -136,7 +136,7 @@ Le CLI reste utilisable en local, connecté à la même base Neon que le schedul
 déployé — les données collectées en arrière-plan sont immédiatement consultables
 sans redéploiement.
 
-## Les 11 dimensions suivies
+## Les dimensions suivies (11 initiales + 2 ajoutées en cours de route)
 
 | # | Dimension | Source | Fréquence |
 |---|---|---|---|
@@ -151,6 +151,8 @@ sans redéploiement.
 | 9 | Déclarations officielles (chancelleries/institutions) | RSS | ~1h30 |
 | 10 | Production industrielle par pays | World Bank | mensuel |
 | 11 | Production de minerais stratégiques | USGS | annuel / manuel |
+| 12 | Notations de crédit souveraines (S&P, Fitch, Moody's) | Wikipédia (scraping) | mensuel |
+| — | Agent de questions/réponses (texte + voix) sur la carte | Neon (toutes dimensions) | temps réel |
 
 ## Limites connues (par source)
 
@@ -200,6 +202,19 @@ sans redéploiement.
   normalisées (dette, chômage, inflation, budget défense, + comptages d'événements
   GDELT) — une pondération arbitraire et documentée, pas calibrée empiriquement.
   Hérite du biais de couverture média de GDELT (voir plus haut).
+- **Notations de crédit souveraines** : aucune API gratuite fiable trouvée pour ce
+  jeu de données commercial des agences de notation (Alphacast propose bien un
+  dataset dédié, mais l'obtention d'une clé nécessite de contacter
+  hello@alphacast.io directement, sans tier gratuit garanti). Récupérées par
+  scraping de la page Wikipédia "List of countries by credit rating"
+  (`pandas.read_html` + `BeautifulSoup`) — reflète la notation *actuelle* connue
+  de la communauté Wikipédia, pas un flux officiel temps réel des agences, et la
+  page peut avoir un léger retard sur les annonces les plus récentes.
+- **Agent de questions/réponses** : reconnaissance par mots-clés (pays + dimension),
+  volontairement SANS LLM — gratuit, déterministe, mais moins flexible qu'un vrai
+  agent conversationnel (formulations inhabituelles peuvent ne pas être reconnues).
+  Le microphone (reconnaissance vocale) fonctionne sur Chrome/Edge, pas sur
+  Firefox ; la synthèse vocale a une compatibilité plus large.
 
 ## Attribution des sources
 
@@ -210,6 +225,7 @@ sans redéploiement.
 - **AISstream.io** — https://aisstream.io
 - **SIPRI Arms Transfers Database** — https://www.sipri.org/databases/armstransfers
 - **USGS National Minerals Information Center** — https://www.usgs.gov/centers/national-minerals-information-center
+- **Wikipédia** — https://en.wikipedia.org/wiki/List_of_countries_by_credit_rating (CC BY-SA)
 - **GeoJSON des frontières mondiales** — dérivé de Natural Earth (domaine public),
   redistribué via https://github.com/johan/world.geo.json
 

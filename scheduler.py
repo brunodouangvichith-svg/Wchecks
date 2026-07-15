@@ -36,6 +36,7 @@ import config
 from collectors import (
     collect_brent,
     collect_conflicts,
+    collect_credit_ratings,
     collect_debt,
     collect_defense_budget,
     collect_economy,
@@ -68,6 +69,7 @@ JOBS = [
     ("country_industry", config.FREQUENCIES_MINUTES["worldbank_indicators"], collect_industry.run),
     ("official_statements", config.FREQUENCIES_MINUTES["official_statements"], collect_official_statements.run),
     ("maritime_traffic", config.FREQUENCIES_MINUTES["maritime_traffic"], collect_maritime_traffic.run),
+    ("credit_ratings", config.FREQUENCIES_MINUTES["worldbank_indicators"], collect_credit_ratings.run),
     ("risk_score", config.FREQUENCIES_MINUTES["risk_score"], risk_score.run),
 ]
 

@@ -208,6 +208,9 @@ _COUNTRIES: dict[str, tuple[str, float, float]] = {
     "Eswatini": ("SWZ", -26.3054, 31.1367),
     "Madagascar": ("MDG", -18.8792, 47.5079),
     "Equatorial Guinea": ("GNQ", 3.7504, 8.7371),
+    "Andorra": ("AND", 42.5063, 1.5218),
+    "Liechtenstein": ("LIE", 47.1660, 9.5554),
+    "San Marino": ("SMR", 43.9424, 12.4578),
     "Comoros": ("COM", -11.7172, 43.2473),
     "Seychelles": ("SYC", -4.6191, 55.4513),
     # --- Petits États insulaires / manquants, découverts en parsant les données SIPRI ---
@@ -240,6 +243,7 @@ _ALIASES: dict[str, str] = {
     "eSwatini": "Eswatini",
     "Palestine": "Palestinian Territories",
     "Bosnia-Herzegovina": "Bosnia and Herzegovina",
+    "Côte d'Ivoire": "Ivory Coast",  # alias observé dans les données Wikipédia (avec accent)
     "Congo (Brazzaville)": "Republic of Congo",  # alias observé dans les données USGS
     "Congo (Kinshasa)": "Democratic Republic of Congo",
     "Korea, North": "North Korea",

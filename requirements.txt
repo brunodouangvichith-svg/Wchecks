@@ -9,3 +9,5 @@ psycopg[binary,pool]
 apscheduler
 openpyxl
 pdfplumber
+lxml
+beautifulsoup4

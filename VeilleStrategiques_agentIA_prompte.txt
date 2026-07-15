@@ -310,4 +310,3 @@ Format : REST (GeoJSON, XML, RSS).
 Accès : Gratuit, sans inscription.
 Exemple d'URL : * Obtenir les séismes de niveau d'alerte rouge : https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventlist=EQ&alertlevel=red
 Documentation : GDACS API Quickstart
-
