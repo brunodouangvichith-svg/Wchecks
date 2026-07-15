@@ -131,6 +131,39 @@ def _handle_conflicts(cur, iso3: str) -> str | None:
     )
 
 
+def _handle_conflicts_list(cur, iso3: str) -> str | None:
+    """Liste les événements récents (titre, date, source) plutôt qu'un simple
+    comptage — le moteur va chercher les sources réelles au lieu d'agréger.
+    """
+    events = []
+    for table, label in [
+        ("energy_conflicts", "conflit énergétique"),
+        ("social_tensions", "tension sociale"),
+        ("military_activity", "activité militaire"),
+    ]:
+        cur.execute(
+            f"SELECT date, titre, url FROM {table} "
+            f"WHERE pays=%s AND titre IS NOT NULL ORDER BY date DESC LIMIT 5",
+            (iso3,),
+        )
+        events.extend((label, date, titre, url) for date, titre, url in cur.fetchall())
+
+    if not events:
+        return None
+
+    events.sort(key=lambda e: e[1] or "", reverse=True)
+    events = events[:8]
+
+    lines = [
+        f"[{label}, {date.strftime('%d/%m/%Y') if date else 'date inconnue'}] {titre} ({url})"
+        for label, date, titre, url in events
+    ]
+    return (
+        "derniers événements recensés (couverture presse GDELT, pas un décompte exhaustif) :\n- "
+        + "\n- ".join(lines)
+    )
+
+
 def _handle_global_synthesis(cur) -> str:
     """Aperçu agrégé tous pays confondus (pas un résumé par pays)."""
     cur.execute(
@@ -191,6 +224,15 @@ DIMENSION_KEYWORDS: list[tuple[list[str], object]] = [
     (["notation", "credit", "crédit", "s&p", "moody", "fitch"], _handle_credit_rating),
 ]
 
+# Mots-clés reconnaissant une demande de LISTE/DÉTAIL (sources individuelles) plutôt
+# qu'un simple comptage agrégé — combinés à un mot-clé "conflit" ci-dessus, ils
+# font basculer vers _handle_conflicts_list (titre, date, url par événement).
+CONFLICT_KEYWORDS = ["conflit", "tension", "guerre", "attaque", "militaire"]
+LIST_KEYWORDS = [
+    "liste", "lister", "listes", "detail", "détail", "details", "détails",
+    "quels sont", "quelles sont", "sources", "source d'information", "sources d'information",
+]
+
 _DEFAULT_HANDLERS = [_handle_economy, _handle_debt, _handle_credit_rating, _handle_risk]
 
 
@@ -202,11 +244,15 @@ def answer_question(question: str) -> str:
     mapping.country_mapping) a toujours priorité : combiné à un mot-clé de
     dimension (dette, économie, défense, industrie, risque, conflits), ou, si
     aucune dimension précise n'est reconnue, un aperçu combiné par pays (économie +
-    dette + risque) — c'est la "synthèse par pays". Seulement si AUCUN pays n'est
-    reconnu, les mots-clés de synthèse mondiale (GLOBAL_KEYWORDS, ex. "vue
-    d'ensemble", "situation mondiale") déclenchent un aperçu agrégé tous pays
-    confondus. Si ni pays ni synthèse globale ne sont reconnus, le dit
-    explicitement plutôt que d'inventer une réponse.
+    dette + risque) — c'est la "synthèse par pays". Un mot-clé de conflit
+    (CONFLICT_KEYWORDS) combiné à un mot-clé de liste/détail (LIST_KEYWORDS, ex.
+    "liste des conflits", "quels sont les conflits") déclenche une recherche
+    autonome des SOURCES individuelles (titre, date, url par événement) plutôt
+    qu'un simple comptage. Seulement si AUCUN pays n'est reconnu, les mots-clés de
+    synthèse mondiale (GLOBAL_KEYWORDS, ex. "vue d'ensemble", "situation
+    mondiale") déclenchent un aperçu agrégé tous pays confondus. Si ni pays ni
+    synthèse globale ne sont reconnus, le dit explicitement plutôt que d'inventer
+    une réponse.
     """
     q_lower = question.lower()
     country_match = _find_country(question)
@@ -224,11 +270,14 @@ def answer_question(question: str) -> str:
 
     iso3, country_name = country_match
 
-    matched_handlers = [
-        handler for keywords, handler in DIMENSION_KEYWORDS if any(kw in q_lower for kw in keywords)
-    ]
-    if not matched_handlers:
-        matched_handlers = _DEFAULT_HANDLERS
+    if any(kw in q_lower for kw in CONFLICT_KEYWORDS) and any(kw in q_lower for kw in LIST_KEYWORDS):
+        matched_handlers = [_handle_conflicts_list]
+    else:
+        matched_handlers = [
+            handler for keywords, handler in DIMENSION_KEYWORDS if any(kw in q_lower for kw in keywords)
+        ]
+        if not matched_handlers:
+            matched_handlers = _DEFAULT_HANDLERS
 
     answers = []
     with get_connection() as conn:
