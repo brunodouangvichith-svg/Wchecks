@@ -21,11 +21,13 @@ cli.py pour un déclenchement manuel.
 """
 
 import http.server
+import json
 import logging
 import os
 import signal
 import sys
 from datetime import datetime, timezone
+from urllib.parse import parse_qs, urlparse
 
 from apscheduler.executors.pool import ThreadPoolExecutor
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -138,14 +140,43 @@ def _handle_sigterm(signum, frame) -> None:
 
 
 class _HealthHandler(http.server.BaseHTTPRequestHandler):
-    """Répond OK à toute requête — sert uniquement à satisfaire Render (Web Service)
-    et le ping externe qui maintient le service éveillé (voir docstring du module)."""
+    """
+    Sert deux rôles :
+    - toute requête GET satisfait Render (Web Service) et le ping externe qui
+      maintient le service éveillé (voir docstring du module) ;
+    - GET /ask?q=<question> répond en JSON à partir des données réelles de Neon
+      (voir qa/engine.py), pour l'interface vocale de la carte (viz/build_map.py).
+      Accès autorisé cross-origin (Access-Control-Allow-Origin: *) : la carte est
+      servie depuis GitHub Pages, un domaine différent de celui de ce service.
+    """
 
     def do_GET(self) -> None:
+        parsed = urlparse(self.path)
+        if parsed.path == "/ask":
+            self._handle_ask(parsed)
+            return
+
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.end_headers()
         self.wfile.write(b"OK - scheduler actif")
+
+    def _handle_ask(self, parsed) -> None:
+        question = parse_qs(parsed.query).get("q", [""])[0]
+        try:
+            from qa.engine import answer_question
+
+            answer = answer_question(question) if question.strip() else "Question vide."
+        except Exception:
+            logger.exception("/ask : échec pour la question '%s'", question)
+            answer = "Erreur interne en traitant la question."
+
+        body = json.dumps({"question": question, "answer": answer}).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body)
 
     def log_message(self, format, *args) -> None:
         pass  # évite de polluer scheduler.log avec chaque requête de ping

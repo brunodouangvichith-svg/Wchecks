@@ -33,6 +33,11 @@ logger = logging.getLogger(__name__)
 GEOJSON_PATH = config.BASE_DIR / "viz" / "data" / "world_countries.geojson"
 OUTPUT_PATH = config.BASE_DIR / "carte_mondiale.html"
 
+# Backend interrogé par le widget vocal/texte (endpoint /ask de scheduler.py, déployé
+# sur Render). La carte étant un fichier statique (GitHub Pages), toute logique de
+# question/réponse doit passer par ce service distant — voir qa/engine.py.
+QA_BACKEND_URL = "https://globalchecks-scheduler.onrender.com/ask"
+
 POINT_LAYERS = [
     ("energy_conflicts", "red", "Conflits énergétiques"),
     ("social_tensions", "orange", "Tensions sociales"),
@@ -210,6 +215,86 @@ def _add_choropleth(
     logger.info("build_map: choroplèthe '%s' -> %d pays", legend_name, len(rows))
 
 
+def _add_qa_widget(m: folium.Map) -> None:
+    """
+    Ajoute un widget flottant (texte + voix) qui interroge le backend /ask
+    (scheduler.py déployé sur Render) et lit la réponse à voix haute.
+
+    Reconnaissance vocale (Web Speech API `SpeechRecognition`) : disponible sur
+    Chrome/Edge, absente sur Firefox et limitée sur Safari — le bouton micro se
+    masque automatiquement si l'API n'existe pas dans le navigateur, l'entrée
+    texte restant utilisable partout. La synthèse vocale (`speechSynthesis`) a
+    une compatibilité plus large.
+    """
+    widget_html = f"""
+    <div id="qa-widget" style="position: fixed; bottom: 20px; right: 20px; z-index: 9999;
+         background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+         padding: 12px; width: 300px; font-family: sans-serif; font-size: 13px; color: #222;">
+      <div style="font-weight: bold; margin-bottom: 6px;">🎙️ Poser une question sur un pays</div>
+      <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+        <input id="qa-input" type="text" placeholder="ex : dette de la France ?"
+               style="flex:1; padding:4px; min-width:0;">
+        <button id="qa-mic-btn" title="Question vocale" style="cursor:pointer;">🎤</button>
+        <button id="qa-send-btn" title="Envoyer" style="cursor:pointer;">➤</button>
+      </div>
+      <div id="qa-answer" style="max-height:160px; overflow-y:auto;"></div>
+    </div>
+    <script>
+    (function() {{
+        const BACKEND_URL = "{QA_BACKEND_URL}";
+        const input = document.getElementById("qa-input");
+        const micBtn = document.getElementById("qa-mic-btn");
+        const sendBtn = document.getElementById("qa-send-btn");
+        const answerDiv = document.getElementById("qa-answer");
+
+        function ask(question) {{
+            question = (question || "").trim();
+            if (!question) return;
+            answerDiv.textContent = "…";
+            fetch(BACKEND_URL + "?q=" + encodeURIComponent(question))
+                .then(function(r) {{ return r.json(); }})
+                .then(function(data) {{
+                    answerDiv.textContent = data.answer;
+                    if ("speechSynthesis" in window) {{
+                        const utter = new SpeechSynthesisUtterance(data.answer);
+                        utter.lang = "fr-FR";
+                        window.speechSynthesis.speak(utter);
+                    }}
+                }})
+                .catch(function() {{
+                    answerDiv.textContent = "Service indisponible (le service Render peut mettre "
+                        + "30-60s à se réveiller s'il était endormi — réessayez).";
+                }});
+        }}
+
+        sendBtn.addEventListener("click", function() {{ ask(input.value); }});
+        input.addEventListener("keydown", function(e) {{ if (e.key === "Enter") ask(input.value); }});
+
+        const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (SpeechRecognitionImpl) {{
+            const recognition = new SpeechRecognitionImpl();
+            recognition.lang = "fr-FR";
+            recognition.interimResults = false;
+            micBtn.addEventListener("click", function() {{
+                micBtn.textContent = "🔴";
+                recognition.start();
+            }});
+            recognition.addEventListener("result", function(event) {{
+                const transcript = event.results[0][0].transcript;
+                input.value = transcript;
+                ask(transcript);
+            }});
+            recognition.addEventListener("end", function() {{ micBtn.textContent = "🎤"; }});
+            recognition.addEventListener("error", function() {{ micBtn.textContent = "🎤"; }});
+        }} else {{
+            micBtn.style.display = "none";
+        }}
+    }})();
+    </script>
+    """
+    m.get_root().html.add_child(folium.Element(widget_html))
+
+
 def build_map(output_path: Path = OUTPUT_PATH) -> Path:
     conn = get_client()
     geojson_data = _load_enriched_geojson()
@@ -231,6 +316,7 @@ def build_map(output_path: Path = OUTPUT_PATH) -> Path:
             )
 
     folium.LayerControl(collapsed=False).add_to(m)
+    _add_qa_widget(m)
     m.save(str(output_path))
     logger.info("build_map: carte générée -> %s", output_path)
     return output_path
