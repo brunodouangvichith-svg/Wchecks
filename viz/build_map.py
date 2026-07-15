@@ -48,8 +48,6 @@ POINT_LAYERS = [
 
 # (table, colonne, légende, palette de couleurs branca)
 CHOROPLETH_SPECS = [
-    ("country_debt", "dette_pct_pib", "Dette publique (% du PIB)", "Reds"),
-    ("country_debt", "dette_montant_milliards_usd", "Dette publique (milliards de USD)", "PuRd"),
     ("country_economy", "chomage_pct", "Chômage (%)", "OrRd"),
     ("country_economy", "inflation_pct", "Inflation (%)", "YlOrRd"),
     ("defense_budget", "budget_pct_pib", "Budget défense (% du PIB)", "Purples"),
@@ -159,11 +157,24 @@ def _add_statements_layer(m: folium.Map, cur) -> None:
 def _add_choropleth(
     m: folium.Map, cur, table: str, value_col: str, legend_name: str, color_scheme: str,
     geojson_data: dict, mineral: str | None = None,
+    tooltip_cols: list[tuple[str, str]] | None = None,
 ) -> None:
+    """
+    `tooltip_cols` : liste ordonnée (colonne, libellé) affichée dans l'info-bulle
+    au survol — par défaut juste `[(value_col, legend_name)]` (comportement
+    d'origine). La couleur de la choroplèthe reste TOUJOURS pilotée par
+    `value_col` seul, quel que soit `tooltip_cols` — ça permet de fondre deux
+    métriques liées (ex. dette en % du PIB + montant en milliards de USD) dans
+    une seule couche/légende au lieu d'une couche par métrique, avec un ordre
+    d'affichage dans l'info-bulle indépendant de celle qui colore la carte.
+    """
+    tooltip_cols = tooltip_cols or [(value_col, legend_name)]
+    fetch_cols = [value_col] + [c for c, _ in tooltip_cols if c != value_col]
+    select_cols = ", ".join(fetch_cols)
     if mineral:
         cur.execute(
             f"""
-            SELECT DISTINCT ON (pays_code) pays_code, {value_col}
+            SELECT DISTINCT ON (pays_code) pays_code, {select_cols}
             FROM {table}
             WHERE matiere_premiere = %s AND {value_col} IS NOT NULL
             ORDER BY pays_code, annee DESC
@@ -174,7 +185,7 @@ def _add_choropleth(
         order_col = ORDER_FIELD[table]
         cur.execute(
             f"""
-            SELECT DISTINCT ON (pays_code) pays_code, {value_col}
+            SELECT DISTINCT ON (pays_code) pays_code, {select_cols}
             FROM {table}
             WHERE {value_col} IS NOT NULL
             ORDER BY pays_code, {order_col} DESC
@@ -185,7 +196,8 @@ def _add_choropleth(
         logger.info("build_map: aucune donnée pour la choroplèthe '%s'", legend_name)
         return
 
-    values_by_iso3 = {iso3: float(value) for iso3, value in rows}
+    col_index = {col: i + 1 for i, col in enumerate(fetch_cols)}  # +1 : index 0 = pays_code
+    row_by_iso3 = {row[0]: row for row in rows}
 
     # Copie propre à cette couche : chaque choroplèthe a sa propre valeur par pays,
     # injectée dans les properties pour alimenter l'info-bulle au survol/clic
@@ -194,10 +206,14 @@ def _add_choropleth(
     layer_geojson = copy.deepcopy(geojson_data)
     for feature in layer_geojson["features"]:
         iso3 = feature["properties"].get("iso3")
-        value = values_by_iso3.get(iso3)
-        feature["properties"]["valeur_affichee"] = f"{value:g}" if value is not None else "Pas de donnée"
+        row = row_by_iso3.get(iso3)
+        for col, _label in tooltip_cols:
+            val = row[col_index[col]] if row else None
+            feature["properties"][f"tt_{col}"] = f"{float(val):g}" if val is not None else "Pas de donnée"
 
-    df = pd.DataFrame(rows, columns=["iso3", "value"]).astype({"value": float})
+    df = pd.DataFrame(
+        [(row[0], row[col_index[value_col]]) for row in rows], columns=["iso3", "value"]
+    ).astype({"value": float})
     choropleth = folium.Choropleth(
         geo_data=layer_geojson,
         name=legend_name,
@@ -212,8 +228,8 @@ def _add_choropleth(
         show=False,
     ).add_to(m)
     folium.GeoJsonTooltip(
-        fields=["name", "valeur_affichee"],
-        aliases=["Pays :", f"{legend_name} :"],
+        fields=["name"] + [f"tt_{col}" for col, _ in tooltip_cols],
+        aliases=["Pays :"] + [f"{label} :" for _, label in tooltip_cols],
     ).add_to(choropleth.geojson)
     logger.info("build_map: choroplèthe '%s' -> %d pays", legend_name, len(rows))
 
@@ -405,6 +421,18 @@ def build_map(output_path: Path = OUTPUT_PATH) -> Path:
                 _add_point_layer(m, cur, table, color, label)
             _add_maritime_layer(m, cur)
             _add_statements_layer(m, cur)
+
+            # Dette publique : une seule couche/légende "Dette publique" (coloration
+            # pilotée par le % du PIB, plus comparable entre pays que le montant
+            # nominal qui écraserait tout sur les seules grandes économies),
+            # l'info-bulle affichant les deux métriques (montant en premier).
+            _add_choropleth(
+                m, cur, "country_debt", "dette_pct_pib", "Dette publique", "Reds", geojson_data,
+                tooltip_cols=[
+                    ("dette_montant_milliards_usd", "Dette publique (milliards de USD)"),
+                    ("dette_pct_pib", "Dette publique (% du PIB)"),
+                ],
+            )
 
             for table, col, legend, scheme in CHOROPLETH_SPECS:
                 _add_choropleth(m, cur, table, col, legend, scheme, geojson_data)
