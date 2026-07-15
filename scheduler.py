@@ -167,9 +167,11 @@ class _HealthHandler(http.server.BaseHTTPRequestHandler):
             from qa.engine import answer_question
 
             answer = answer_question(question) if question.strip() else "Question vide."
-        except Exception:
+        except Exception as exc:
             logger.exception("/ask : échec pour la question '%s'", question)
-            answer = "Erreur interne en traitant la question."
+            # Diagnostic temporaire : seul le TYPE d'exception est exposé (jamais le
+            # message complet, qui pourrait contenir des informations de connexion).
+            answer = f"Erreur interne ({type(exc).__name__}) en traitant la question."
 
         body = json.dumps({"question": question, "answer": answer}).encode("utf-8")
         self.send_response(200)
