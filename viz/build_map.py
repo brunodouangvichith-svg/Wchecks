@@ -14,6 +14,7 @@ GeoJSON des frontières : viz/data/world_countries.geojson — dérivé de Natur
 Earth (domaine public), redistribué via github.com/johan/world.geo.json.
 """
 
+import copy
 import html
 import json
 import logging
@@ -170,9 +171,21 @@ def _add_choropleth(
         logger.info("build_map: aucune donnée pour la choroplèthe '%s'", legend_name)
         return
 
+    values_by_iso3 = {iso3: float(value) for iso3, value in rows}
+
+    # Copie propre à cette couche : chaque choroplèthe a sa propre valeur par pays,
+    # injectée dans les properties pour alimenter l'info-bulle au survol/clic
+    # (sans ça, cliquer un pays coloré ne montre rien — voir les marqueurs GDELT
+    # empilés au centroïde du pays, qui eux ont un popup, d'où la confusion).
+    layer_geojson = copy.deepcopy(geojson_data)
+    for feature in layer_geojson["features"]:
+        iso3 = feature["properties"].get("iso3")
+        value = values_by_iso3.get(iso3)
+        feature["properties"]["valeur_affichee"] = f"{value:g}" if value is not None else "Pas de donnée"
+
     df = pd.DataFrame(rows, columns=["iso3", "value"]).astype({"value": float})
-    folium.Choropleth(
-        geo_data=geojson_data,
+    choropleth = folium.Choropleth(
+        geo_data=layer_geojson,
         name=legend_name,
         data=df,
         columns=["iso3", "value"],
@@ -184,6 +197,10 @@ def _add_choropleth(
         nan_fill_color="white",
         show=False,
     ).add_to(m)
+    folium.GeoJsonTooltip(
+        fields=["name", "valeur_affichee"],
+        aliases=["Pays :", f"{legend_name} :"],
+    ).add_to(choropleth.geojson)
     logger.info("build_map: choroplèthe '%s' -> %d pays", legend_name, len(rows))
 
 
