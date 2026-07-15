@@ -113,6 +113,54 @@ def _handle_conflicts(cur, iso3: str) -> str | None:
     )
 
 
+def _handle_global_synthesis(cur) -> str:
+    """Aperçu agrégé tous pays confondus (pas un résumé par pays)."""
+    cur.execute(
+        """
+        SELECT DISTINCT ON (pays_code) pays_code, score_global
+        FROM risk_scores
+        ORDER BY pays_code, date_calcul DESC
+        """
+    )
+    latest_scores = cur.fetchall()
+    top5 = sorted(latest_scores, key=lambda r: -float(r[1]))[:5]
+    top5_str = ", ".join(f"{pays} ({float(score):.1f}/100)" for pays, score in top5)
+
+    cur.execute(
+        "SELECT AVG(v) FROM (SELECT DISTINCT ON (pays_code) dette_pct_pib AS v FROM country_debt "
+        "WHERE dette_pct_pib IS NOT NULL ORDER BY pays_code, annee DESC) t"
+    )
+    avg_debt = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM energy_conflicts")
+    n_conflicts = cur.fetchone()[0]
+    cur.execute("SELECT COUNT(*) FROM social_tensions")
+    n_tensions = cur.fetchone()[0]
+    cur.execute("SELECT COUNT(*) FROM military_activity")
+    n_military = cur.fetchone()[0]
+
+    parts = [
+        f"{n_conflicts} conflit(s) énergétique(s), {n_tensions} tension(s) sociale(s) et "
+        f"{n_military} événement(s) d'activité militaire recensés au total (couverture presse GDELT, "
+        "pas un décompte exhaustif)"
+    ]
+    if avg_debt is not None:
+        parts.append(f"dette publique moyenne des pays surveillés : {float(avg_debt):.1f}% du PIB")
+    if top5:
+        parts.append(f"pays au score de risque le plus élevé actuellement : {top5_str}")
+
+    return "Synthèse mondiale : " + ", ".join(parts) + "."
+
+
+# Mots-clés déclenchant l'aperçu global (tous pays confondus) plutôt qu'une
+# réponse pays par pays — vérifiés AVANT la recherche de pays dans la question.
+GLOBAL_KEYWORDS = [
+    "mondial", "mondiale", "monde", "global", "globale", "ensemble des pays",
+    "tous les pays", "synthese", "synthèse", "vue d'ensemble", "vue d ensemble",
+    "situation generale", "situation générale",
+]
+
+
 # (mots-clés déclencheurs, fonction de réponse) — la question par défaut (aucun mot-clé
 # reconnu) déclenche un aperçu combinant économie + dette + risque.
 DIMENSION_KEYWORDS: list[tuple[list[str], object]] = [
@@ -131,11 +179,20 @@ def answer_question(question: str) -> str:
     """
     Répond à une question en langage naturel simple à partir des données Neon.
 
-    Reconnaît un pays (nom français/anglais, via mapping.country_mapping) et un
+    Reconnaît soit une demande de synthèse mondiale (GLOBAL_KEYWORDS, ex. "vue
+    d'ensemble", "situation mondiale") — auquel cas aucun pays n'est requis —, soit
+    un pays (nom français/anglais, via mapping.country_mapping) combiné à un
     mot-clé de dimension (dette, économie, défense, industrie, risque, conflits).
-    Si aucun mot-clé de dimension n'est reconnu, renvoie un aperçu combiné
-    (économie + dette + risque). Si le pays n'est pas reconnu, le dit explicitement.
+    Si aucun mot-clé de dimension n'est reconnu pour un pays donné, renvoie un
+    aperçu combiné (économie + dette + risque). Si ni synthèse globale ni pays ne
+    sont reconnus, le dit explicitement plutôt que d'inventer une réponse.
     """
+    q_lower = question.lower()
+    if any(kw in q_lower for kw in GLOBAL_KEYWORDS):
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                return _handle_global_synthesis(cur)
+
     country_match = _find_country(question)
     if country_match is None:
         return (
@@ -144,7 +201,6 @@ def answer_question(question: str) -> str:
         )
 
     iso3, country_name = country_match
-    q_lower = question.lower()
 
     matched_handlers = [
         handler for keywords, handler in DIMENSION_KEYWORDS if any(kw in q_lower for kw in keywords)

@@ -285,3 +285,29 @@ Project : WorldChecks
 
 Modifie `fetch_dbnomics_data.py` pour ajouter les données de production industrielle du Japon et de la zone Euro globale (recherche les codes correspondants dans le dataset OECD/MEI sur DBnomics si nécessaire). Assure-toi que ces nouvelles séries apparaissent proprement sur le graphique généré et dans l'export CSV. Lance ensuite le script pour vérifier que l'ajout fonctionne sans erreur.
 
+1. DBnomics API (Le plus simple et exhaustif)DBnomics est un projet open-source fantastique qui agrège les données économiques de centaines de producteurs mondiaux (FMI, Banque Mondiale, Eurostat, OCDE, etc.) en une seule et unique API gratuite et sans clé d'accès requise.  
+Pourquoi l'utiliser : Vous pouvez requêter la production industrielle de presque n'importe quel pays via un seul format d'API, peu importe si la donnée source vient de l'OCDE ou de l'institut national du pays.
+Format : REST (JSON).  
+Documentation : db.nomics.world  
+
+=============================================================
+
+données sur les catastrophes naturelles (séismes, incendies, inondations, tempêtes, etc.), voici les meilleures options disponibles :
+
+1. NASA EONET (Earth Observatory Natural Event Tracker)
+L'API EONET de la NASA est l'une des plus populaires et des plus simples à utiliser pour suivre les événements naturels en cours ou récents à l'échelle mondiale.
+Types de catastrophes : Feux de forêt, éruptions volcaniques, tempêtes sévères, glaces de mer, etc.
+Format : REST (JSON / GeoJSON).
+Accès : Gratuit et sans clé d'API (ou avec une clé gratuite d'API NASA pour des quotas plus élevés).
+Exemple d'URL : * Tous les événements actifs : https://eonet.gsfc.nasa.gov/api/v3/events
+Par catégorie (ex: volcans) : https://eonet.gsfc.nasa.gov/api/v3/categories/volcanoes
+Documentation : eonet.gsfc.nasa.gov
+
+2. GDACS (Global Disaster Alert and Coordination System)
+Le GDACS est le système officiel de coordination et d'alerte géré conjointement par les Nations Unies et la Commission européenne. C'est l'API de référence pour la gestion de crise en temps réel.
+Types de catastrophes : Séismes, inondations, cyclones tropicaux, sécheresses, éruptions volcaniques.
+Format : REST (GeoJSON, XML, RSS).
+Accès : Gratuit, sans inscription.
+Exemple d'URL : * Obtenir les séismes de niveau d'alerte rouge : https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventlist=EQ&alertlevel=red
+Documentation : GDACS API Quickstart
+
