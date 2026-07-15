@@ -7,8 +7,16 @@ LIMITE CONNUE : le mode ArtList de la DOC API renvoie le titre, l'URL, la date e
 le pays source d'un article, mais ni coordonnées précises ni tonalité par article
 (seul un agrégat par requête existe via le mode ToneChart, pas exploitable par
 événement individuel). Pour rester honnête sur la précision des données :
-- le lat/lon renvoyé ici est une approximation au niveau PAYS (centroïde), pas une
-  géolocalisation de l'événement (voir mapping/country_mapping.py) ;
+- le lat/lon renvoyé ici est par défaut une approximation au niveau PAYS
+  (centroïde), pas une géolocalisation de l'événement (voir
+  mapping/country_mapping.py). CAS PARTICULIER : le "pays source" GDELT est celui
+  du MÉDIA qui publie l'article, pas celui de l'événement — un article sur le
+  détroit d'Ormuz publié par un média américain se retrouvait donc plaqué sur
+  Washington. Pour les zones stratégiques (détroits, mers) qui ne sont pas des
+  pays, on détecte leur mention dans le TITRE de l'article (voir ZONE_KEYWORDS)
+  et on utilise alors le centre de la zone (config.STRATEGIC_ZONES) à la place du
+  centroïde pays — toujours une approximation (centre de zone, pas coordonnées
+  exactes de l'événement), mais nettement plus proche de la réalité ;
 - la tonalité ("ton") n'est pas disponible via cette API gratuite et reste `None` —
   documenté comme limite connue plutôt que remplacé par un proxy inventé.
 """
@@ -18,9 +26,35 @@ import time
 
 import requests
 
+import config
 from mapping.country_mapping import resolve_country
 
 logger = logging.getLogger(__name__)
+
+# Mots-clés (titre d'article, en minuscule) -> zone stratégique de
+# config.STRATEGIC_ZONES. Vérifié avant le centroïde pays : un détroit ou une mer
+# n'est pas un pays, GDELT ne peut de toute façon pas le renvoyer comme tel.
+ZONE_KEYWORDS = {
+    "detroit_ormuz": ["hormuz", "ormuz"],
+    "detroit_malacca": ["malacca"],
+    "suez": ["suez"],
+    "bab_el_mandeb": ["bab-el-mandeb", "bab el mandeb", "mandeb"],
+    "mer_rouge": ["red sea", "mer rouge"],
+    "golfe_mexique": ["gulf of mexico", "golfe du mexique"],
+}
+
+
+def _zone_center(zone_name: str) -> tuple[float, float]:
+    zone = config.STRATEGIC_ZONES[zone_name]
+    return (zone["lat_min"] + zone["lat_max"]) / 2, (zone["lon_min"] + zone["lon_max"]) / 2
+
+
+def _detect_zone(title: str | None) -> str | None:
+    title_lower = (title or "").lower()
+    for zone_name, keywords in ZONE_KEYWORDS.items():
+        if any(kw in title_lower for kw in keywords):
+            return zone_name
+    return None
 
 BASE_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
 TIMEOUT_SECONDS = 30
@@ -56,7 +90,13 @@ def search_articles(keywords: list[str], timespan: str = "1d", max_records: int 
         url = article.get("url")
         if not url:
             continue
+        title = article.get("title")
         iso3, lat, lon = resolve_country(article.get("sourcecountry", ""))
+
+        zone_name = _detect_zone(title)
+        if zone_name is not None:
+            lat, lon = _zone_center(zone_name)
+
         rows.append(
             {
                 "event_id": url,
@@ -64,7 +104,7 @@ def search_articles(keywords: list[str], timespan: str = "1d", max_records: int 
                 "pays": iso3,
                 "lat": lat,
                 "lon": lon,
-                "titre": article.get("title"),
+                "titre": title,
                 "ton": None,
                 "url": url,
             }
