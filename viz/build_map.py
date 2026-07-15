@@ -22,6 +22,7 @@ from pathlib import Path
 
 import folium
 import pandas as pd
+from folium.plugins import MarkerCluster
 
 import config
 from clients.neon_client import ORDER_FIELD, get_client
@@ -80,27 +81,32 @@ def _load_enriched_geojson() -> dict:
 
 
 def _add_point_layer(m: folium.Map, cur, table: str, color: str, label: str) -> None:
+    # MarkerCluster : de nombreux événements GDELT partagent la même position (le
+    # centroïde du pays, faute de géolocalisation précise par article — jusqu'à 105
+    # marqueurs empilés au même point pour les USA). Le clustering les regroupe en
+    # une bulle avec un compteur, qui se déplie au clic/zoom plutôt que de rester
+    # illisible. Note : le clustering Leaflet ne fonctionne qu'avec de vrais Marker
+    # (icônes), pas les CircleMarker (calques vectoriels) — d'où le changement de type.
     fg = folium.FeatureGroup(name=label, show=(table == "energy_conflicts"))
+    cluster = MarkerCluster().add_to(fg)
     cur.execute(f"SELECT lat, lon, titre, url, date FROM {table} WHERE lat IS NOT NULL AND lon IS NOT NULL")
     rows = cur.fetchall()
     for lat, lon, titre, url, date in rows:
         popup_html = f"<b>{html.escape(titre or '(sans titre)')}</b><br>{date or ''}"
         if url:
             popup_html += f'<br><a href="{html.escape(url)}" target="_blank">source</a>'
-        folium.CircleMarker(
+        folium.Marker(
             location=[lat, lon],
-            radius=4,
-            color=color,
-            fill=True,
-            fill_opacity=0.7,
+            icon=folium.Icon(color=color),
             popup=folium.Popup(popup_html, max_width=300),
-        ).add_to(fg)
+        ).add_to(cluster)
     fg.add_to(m)
     logger.info("build_map: %s -> %d point(s)", table, len(rows))
 
 
 def _add_maritime_layer(m: folium.Map, cur) -> None:
     fg = folium.FeatureGroup(name="Trafic maritime (tankers)", show=False)
+    cluster = MarkerCluster().add_to(fg)
     cur.execute(
         "SELECT lat, lon, mmsi, zone_strategique, vitesse, cap FROM maritime_traffic "
         "WHERE lat IS NOT NULL AND lon IS NOT NULL"
@@ -116,7 +122,7 @@ def _add_maritime_layer(m: folium.Map, cur) -> None:
             location=[lat, lon],
             icon=folium.Icon(color="blue", icon="ship", prefix="fa"),
             popup=folium.Popup(popup_html, max_width=250),
-        ).add_to(fg)
+        ).add_to(cluster)
     fg.add_to(m)
     logger.info("build_map: maritime_traffic -> %d point(s)", len(rows))
 
