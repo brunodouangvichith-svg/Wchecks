@@ -230,12 +230,18 @@ class _QaWidget(MacroElement):
     carte s'exécutait alors AVANT que celle-ci n'existe. Un `MacroElement` ajouté
     à la carte se rend dans le bon ordre, comme n'importe quel autre plugin.
 
-    Ancré au coin de la carte via un vrai `L.Control` Leaflet plutôt qu'une
-    `<div style="position: fixed">` : à l'intérieur d'une carte Leaflet, `fixed`
-    se positionne par rapport au premier ancêtre avec un `transform` CSS (Leaflet
-    en pose sur ses panneaux internes) plutôt que par rapport à la fenêtre —
-    constaté en pratique (le widget apparaissait centré en bas de la carte au
-    lieu du coin bas-droit demandé).
+Positionné en bas, centré horizontalement sur la carte. Deux pièges déjà
+    rencontrés en construisant ce positionnement :
+    1. `<div style="position: fixed">` se recale sur le premier ancêtre avec un
+       `transform` CSS à l'intérieur d'une carte Leaflet (ses panneaux internes en
+       ont, pour le pan/zoom) plutôt que sur la fenêtre — le widget apparaissait
+       centré en bas au lieu du coin bas-droit demandé initialement.
+    2. Un `L.Control` Leaflet standard ne permet pas non plus un vrai centrage
+       horizontal : ses conteneurs de coin (`.leaflet-bottom.leaflet-left/right`)
+       ne font pas la largeur de la carte, donc `left: 50%` à l'intérieur ne
+       centre pas sur la carte entière. Le widget est donc attaché directement à
+       `map.getContainer()` (pleine largeur/hauteur, `position: relative`) avec
+       un `position: absolute; left: 50%; transform: translateX(-50%)` dessus.
 
     Reconnaissance vocale (Web Speech API `SpeechRecognition`) : disponible sur
     Chrome/Edge, absente sur Firefox et limitée sur Safari — le bouton micro se
@@ -248,37 +254,44 @@ class _QaWidget(MacroElement):
         """
         {% macro script(this, kwargs) %}
         (function() {
-            var QaControl = L.Control.extend({
-                options: { position: 'bottomright' },
-                onAdd: function(map) {
-                    var container = L.DomUtil.create('div', 'qa-widget-control');
-                    container.style.background = 'white';
-                    container.style.borderRadius = '8px';
-                    container.style.boxShadow = '0 2px 10px rgba(0,0,0,0.35)';
-                    container.style.padding = '12px';
-                    container.style.width = '280px';
-                    container.style.fontFamily = 'sans-serif';
-                    container.style.fontSize = '13px';
-                    container.style.color = '#222';
-                    container.innerHTML =
-                        '<div style="font-weight:bold; margin-bottom:6px;">🎙️ Poser une question sur un pays</div>' +
-                        '<div style="display:flex; gap:6px; margin-bottom:8px;">' +
-                        '<input id="qa-input" type="text" placeholder="ex : dette de la France ?" ' +
-                        'style="flex:1; padding:4px; min-width:0;">' +
-                        '<button id="qa-mic-btn" title="Question vocale" style="cursor:pointer;">🎤</button>' +
-                        '<button id="qa-send-btn" title="Envoyer" style="cursor:pointer;">➤</button>' +
-                        '</div>' +
-                        '<div id="qa-answer" style="max-height:160px; overflow-y:auto; margin-bottom:6px;"></div>' +
-                        '<div style="display:flex; gap:6px;">' +
-                        '<button id="qa-copy-btn" style="cursor:pointer; flex:1;">📋 Copier</button>' +
-                        '<button id="qa-clear-btn" style="cursor:pointer; flex:1;">🗑️ Effacer</button>' +
-                        '</div>';
-                    L.DomEvent.disableClickPropagation(container);
-                    L.DomEvent.disableScrollPropagation(container);
-                    return container;
-                }
-            });
-            {{ this._parent.get_name() }}.addControl(new QaControl());
+            // Pas de L.Control ici : Leaflet ne propose que les 4 coins pour ses
+            // contrôles natifs (leurs conteneurs de coin ne font pas la largeur de
+            // la carte, donc un `left: 50%` à l'intérieur ne centre pas sur la
+            // carte entière). On attache directement au conteneur de la carte
+            // (pleine largeur/hauteur, position relative) avec un positionnement
+            // absolute centré horizontalement — évite aussi le bug initial de
+            // `position: fixed`, qui se recale sur le premier ancêtre avec un
+            // `transform` CSS (les panneaux internes de Leaflet en ont).
+            var map = {{ this._parent.get_name() }};
+            var container = L.DomUtil.create('div', 'qa-widget-control', map.getContainer());
+            container.style.position = 'absolute';
+            container.style.bottom = '20px';
+            container.style.left = '50%';
+            container.style.transform = 'translateX(-50%)';
+            container.style.zIndex = 1000;
+            container.style.background = 'white';
+            container.style.borderRadius = '8px';
+            container.style.boxShadow = '0 2px 10px rgba(0,0,0,0.35)';
+            container.style.padding = '12px';
+            container.style.width = '280px';
+            container.style.fontFamily = 'sans-serif';
+            container.style.fontSize = '13px';
+            container.style.color = '#222';
+            container.innerHTML =
+                '<div style="font-weight:bold; margin-bottom:6px;">🎙️ Poser une question sur un pays</div>' +
+                '<div style="display:flex; gap:6px; margin-bottom:8px;">' +
+                '<input id="qa-input" type="text" placeholder="ex : dette de la France ?" ' +
+                'style="flex:1; padding:4px; min-width:0;">' +
+                '<button id="qa-mic-btn" title="Question vocale" style="cursor:pointer;">🎤</button>' +
+                '<button id="qa-send-btn" title="Envoyer" style="cursor:pointer;">➤</button>' +
+                '</div>' +
+                '<div id="qa-answer" style="max-height:160px; overflow-y:auto; margin-bottom:6px;"></div>' +
+                '<div style="display:flex; gap:6px;">' +
+                '<button id="qa-copy-btn" style="cursor:pointer; flex:1;">📋 Copier</button>' +
+                '<button id="qa-clear-btn" style="cursor:pointer; flex:1;">🗑️ Effacer</button>' +
+                '</div>';
+            L.DomEvent.disableClickPropagation(container);
+            L.DomEvent.disableScrollPropagation(container);
 
             const BACKEND_URL = "{{ this.backend_url }}";
             const input = document.getElementById("qa-input");
