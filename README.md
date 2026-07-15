@@ -70,8 +70,12 @@ cp .env.example .env      # puis renseigner les variables (voir ci-dessous)
 ### Base de données : Neon (PostgreSQL serverless)
 
 1. Créer un projet gratuit sur https://neon.tech
-2. Copier la chaîne de connexion (dashboard > Connection Details, URL avec pooler
-   recommandée pour un usage serverless) dans `DATABASE_URL`
+2. Copier la chaîne de connexion **avec pooler** (dashboard > Connection Details >
+   case "Pooled connection", hôte contenant `-pooler`) dans `DATABASE_URL`. ⚠️
+   **Obligatoire, pas juste recommandé** : `clients/neon_client.py` ouvre un pool
+   de connexions concurrentes (jusqu'à 10) — utiliser l'endpoint direct (sans
+   `-pooler`) épuise rapidement la limite de connexions de Neon et provoque des
+   `PoolTimeout` en production (constaté en pratique lors du déploiement Render).
 3. Exécuter `db/schema.sql` dans l'éditeur SQL du dashboard (ou via `psql`/tout
    client Postgres connecté à `DATABASE_URL`) — crée les 16 tables et leurs
    contraintes UNIQUE (anti-doublons via `INSERT ... ON CONFLICT ... DO UPDATE`)

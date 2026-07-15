@@ -155,45 +155,11 @@ class _HealthHandler(http.server.BaseHTTPRequestHandler):
         if parsed.path == "/ask":
             self._handle_ask(parsed)
             return
-        if parsed.path == "/debug":
-            self._handle_debug()
-            return
 
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.end_headers()
         self.wfile.write(b"OK - scheduler actif")
-
-    def _handle_debug(self) -> None:
-        """Diagnostic temporaire (à retirer une fois le bug /ask résolu) : n'expose
-        aucune valeur de secret, seulement présence/longueur/identité d'objet."""
-        import os as _os
-
-        info = {
-            "env_DATABASE_URL_present": bool(_os.environ.get("DATABASE_URL")),
-            "env_DATABASE_URL_len": len(_os.environ.get("DATABASE_URL") or ""),
-            "config_DATABASE_URL_present": bool(config.DATABASE_URL),
-            "config_DATABASE_URL_len": len(config.DATABASE_URL or ""),
-            "config_module_id": id(config),
-            "pid": _os.getpid(),
-        }
-        try:
-            from clients import neon_client as _nc
-
-            info["neon_client_config_module_id"] = id(_nc.config)
-            info["neon_client_config_DATABASE_URL_present"] = bool(_nc.config.DATABASE_URL)
-            info["pool_exists"] = _nc._pool is not None
-            if _nc._pool is not None:
-                info["pool_stats"] = _nc._pool.get_stats()
-        except Exception as exc:
-            info["neon_client_import_error"] = f"{type(exc).__name__}: {exc}"
-
-        body = json.dumps(info).encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.end_headers()
-        self.wfile.write(body)
 
     def _handle_ask(self, parsed) -> None:
         question = parse_qs(parsed.query).get("q", [""])[0]
@@ -201,12 +167,9 @@ class _HealthHandler(http.server.BaseHTTPRequestHandler):
             from qa.engine import answer_question
 
             answer = answer_question(question) if question.strip() else "Question vide."
-        except Exception as exc:
+        except Exception:
             logger.exception("/ask : échec pour la question '%s'", question)
-            # Diagnostic temporaire : message d'erreur assaini (chaîne de connexion
-            # retirée si présente) pour identifier la cause sans exposer de secret.
-            safe_message = str(exc).replace(config.DATABASE_URL or "***", "[DATABASE_URL retirée]")
-            answer = f"Erreur interne ({type(exc).__name__}: {safe_message}) en traitant la question."
+            answer = "Erreur interne en traitant la question."
 
         body = json.dumps({"question": question, "answer": answer}).encode("utf-8")
         self.send_response(200)

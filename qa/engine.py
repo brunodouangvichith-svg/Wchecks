@@ -179,25 +179,28 @@ def answer_question(question: str) -> str:
     """
     Répond à une question en langage naturel simple à partir des données Neon.
 
-    Reconnaît soit une demande de synthèse mondiale (GLOBAL_KEYWORDS, ex. "vue
-    d'ensemble", "situation mondiale") — auquel cas aucun pays n'est requis —, soit
-    un pays (nom français/anglais, via mapping.country_mapping) combiné à un
-    mot-clé de dimension (dette, économie, défense, industrie, risque, conflits).
-    Si aucun mot-clé de dimension n'est reconnu pour un pays donné, renvoie un
-    aperçu combiné (économie + dette + risque). Si ni synthèse globale ni pays ne
-    sont reconnus, le dit explicitement plutôt que d'inventer une réponse.
+    Un PAYS reconnu dans la question (nom français/anglais, via
+    mapping.country_mapping) a toujours priorité : combiné à un mot-clé de
+    dimension (dette, économie, défense, industrie, risque, conflits), ou, si
+    aucune dimension précise n'est reconnue, un aperçu combiné par pays (économie +
+    dette + risque) — c'est la "synthèse par pays". Seulement si AUCUN pays n'est
+    reconnu, les mots-clés de synthèse mondiale (GLOBAL_KEYWORDS, ex. "vue
+    d'ensemble", "situation mondiale") déclenchent un aperçu agrégé tous pays
+    confondus. Si ni pays ni synthèse globale ne sont reconnus, le dit
+    explicitement plutôt que d'inventer une réponse.
     """
     q_lower = question.lower()
-    if any(kw in q_lower for kw in GLOBAL_KEYWORDS):
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                return _handle_global_synthesis(cur)
-
     country_match = _find_country(question)
+
     if country_match is None:
+        if any(kw in q_lower for kw in GLOBAL_KEYWORDS):
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    return _handle_global_synthesis(cur)
         return (
             "Je n'ai pas reconnu de pays dans votre question. "
-            'Essayez par exemple : "quelle est la dette de la France ?"'
+            'Essayez par exemple : "quelle est la dette de la France ?" '
+            'ou "donne-moi une vue d\'ensemble".'
         )
 
     iso3, country_name = country_match
