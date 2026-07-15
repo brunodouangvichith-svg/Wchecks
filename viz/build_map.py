@@ -22,7 +22,9 @@ from pathlib import Path
 
 import folium
 import pandas as pd
+from branca.element import MacroElement
 from folium.plugins import MarkerCluster
+from jinja2 import Template
 
 import config
 from clients.neon_client import ORDER_FIELD, get_connection
@@ -215,10 +217,25 @@ def _add_choropleth(
     logger.info("build_map: choroplèthe '%s' -> %d pays", legend_name, len(rows))
 
 
-def _add_qa_widget(m: folium.Map) -> None:
+class _QaWidget(MacroElement):
     """
-    Ajoute un widget flottant (texte + voix) qui interroge le backend /ask
-    (scheduler.py déployé sur Render) et lit la réponse à voix haute.
+    Widget flottant (texte + voix) qui interroge le backend /ask (scheduler.py
+    déployé sur Render) et lit la réponse à voix haute.
+
+    Implémenté comme un vrai `MacroElement` Folium (comme `LayerControl`,
+    `Choropleth`...) ajouté via `.add_to(m)`, PAS via une manipulation directe de
+    `m.get_root().script` : cette dernière approche ajoute le contenu au moment de
+    la construction Python, avant que la carte n'ait injecté son propre code de
+    création (qui n'arrive qu'au moment du rendu) — le script référençant la
+    carte s'exécutait alors AVANT que celle-ci n'existe. Un `MacroElement` ajouté
+    à la carte se rend dans le bon ordre, comme n'importe quel autre plugin.
+
+    Ancré au coin de la carte via un vrai `L.Control` Leaflet plutôt qu'une
+    `<div style="position: fixed">` : à l'intérieur d'une carte Leaflet, `fixed`
+    se positionne par rapport au premier ancêtre avec un `transform` CSS (Leaflet
+    en pose sur ses panneaux internes) plutôt que par rapport à la fenêtre —
+    constaté en pratique (le widget apparaissait centré en bas de la carte au
+    lieu du coin bas-droit demandé).
 
     Reconnaissance vocale (Web Speech API `SpeechRecognition`) : disponible sur
     Chrome/Edge, absente sur Firefox et limitée sur Safari — le bouton micro se
@@ -226,73 +243,124 @@ def _add_qa_widget(m: folium.Map) -> None:
     texte restant utilisable partout. La synthèse vocale (`speechSynthesis`) a
     une compatibilité plus large.
     """
-    widget_html = f"""
-    <div id="qa-widget" style="position: fixed; bottom: 20px; right: 20px; z-index: 9999;
-         background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.35);
-         padding: 12px; width: 300px; font-family: sans-serif; font-size: 13px; color: #222;">
-      <div style="font-weight: bold; margin-bottom: 6px;">🎙️ Poser une question sur un pays</div>
-      <div style="display: flex; gap: 6px; margin-bottom: 8px;">
-        <input id="qa-input" type="text" placeholder="ex : dette de la France ?"
-               style="flex:1; padding:4px; min-width:0;">
-        <button id="qa-mic-btn" title="Question vocale" style="cursor:pointer;">🎤</button>
-        <button id="qa-send-btn" title="Envoyer" style="cursor:pointer;">➤</button>
-      </div>
-      <div id="qa-answer" style="max-height:160px; overflow-y:auto;"></div>
-    </div>
-    <script>
-    (function() {{
-        const BACKEND_URL = "{QA_BACKEND_URL}";
-        const input = document.getElementById("qa-input");
-        const micBtn = document.getElementById("qa-mic-btn");
-        const sendBtn = document.getElementById("qa-send-btn");
-        const answerDiv = document.getElementById("qa-answer");
 
-        function ask(question) {{
-            question = (question || "").trim();
-            if (!question) return;
-            answerDiv.textContent = "…";
-            fetch(BACKEND_URL + "?q=" + encodeURIComponent(question))
-                .then(function(r) {{ return r.json(); }})
-                .then(function(data) {{
-                    answerDiv.textContent = data.answer;
-                    if ("speechSynthesis" in window) {{
-                        const utter = new SpeechSynthesisUtterance(data.answer);
-                        utter.lang = "fr-FR";
-                        window.speechSynthesis.speak(utter);
-                    }}
-                }})
-                .catch(function() {{
-                    answerDiv.textContent = "Service indisponible (le service Render peut mettre "
-                        + "30-60s à se réveiller s'il était endormi — réessayez).";
-                }});
-        }}
+    _template = Template(
+        """
+        {% macro script(this, kwargs) %}
+        (function() {
+            var QaControl = L.Control.extend({
+                options: { position: 'bottomright' },
+                onAdd: function(map) {
+                    var container = L.DomUtil.create('div', 'qa-widget-control');
+                    container.style.background = 'white';
+                    container.style.borderRadius = '8px';
+                    container.style.boxShadow = '0 2px 10px rgba(0,0,0,0.35)';
+                    container.style.padding = '12px';
+                    container.style.width = '280px';
+                    container.style.fontFamily = 'sans-serif';
+                    container.style.fontSize = '13px';
+                    container.style.color = '#222';
+                    container.innerHTML =
+                        '<div style="font-weight:bold; margin-bottom:6px;">🎙️ Poser une question sur un pays</div>' +
+                        '<div style="display:flex; gap:6px; margin-bottom:8px;">' +
+                        '<input id="qa-input" type="text" placeholder="ex : dette de la France ?" ' +
+                        'style="flex:1; padding:4px; min-width:0;">' +
+                        '<button id="qa-mic-btn" title="Question vocale" style="cursor:pointer;">🎤</button>' +
+                        '<button id="qa-send-btn" title="Envoyer" style="cursor:pointer;">➤</button>' +
+                        '</div>' +
+                        '<div id="qa-answer" style="max-height:160px; overflow-y:auto; margin-bottom:6px;"></div>' +
+                        '<div style="display:flex; gap:6px;">' +
+                        '<button id="qa-copy-btn" style="cursor:pointer; flex:1;">📋 Copier</button>' +
+                        '<button id="qa-clear-btn" style="cursor:pointer; flex:1;">🗑️ Effacer</button>' +
+                        '</div>';
+                    L.DomEvent.disableClickPropagation(container);
+                    L.DomEvent.disableScrollPropagation(container);
+                    return container;
+                }
+            });
+            {{ this._parent.get_name() }}.addControl(new QaControl());
 
-        sendBtn.addEventListener("click", function() {{ ask(input.value); }});
-        input.addEventListener("keydown", function(e) {{ if (e.key === "Enter") ask(input.value); }});
+            const BACKEND_URL = "{{ this.backend_url }}";
+            const input = document.getElementById("qa-input");
+            const micBtn = document.getElementById("qa-mic-btn");
+            const sendBtn = document.getElementById("qa-send-btn");
+            const answerDiv = document.getElementById("qa-answer");
+            const copyBtn = document.getElementById("qa-copy-btn");
+            const clearBtn = document.getElementById("qa-clear-btn");
 
-        const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (SpeechRecognitionImpl) {{
-            const recognition = new SpeechRecognitionImpl();
-            recognition.lang = "fr-FR";
-            recognition.interimResults = false;
-            micBtn.addEventListener("click", function() {{
-                micBtn.textContent = "🔴";
-                recognition.start();
-            }});
-            recognition.addEventListener("result", function(event) {{
-                const transcript = event.results[0][0].transcript;
-                input.value = transcript;
-                ask(transcript);
-            }});
-            recognition.addEventListener("end", function() {{ micBtn.textContent = "🎤"; }});
-            recognition.addEventListener("error", function() {{ micBtn.textContent = "🎤"; }});
-        }} else {{
-            micBtn.style.display = "none";
-        }}
-    }})();
-    </script>
-    """
-    m.get_root().html.add_child(folium.Element(widget_html))
+            function ask(question) {
+                question = (question || "").trim();
+                if (!question) return;
+                answerDiv.textContent = "…";
+                fetch(BACKEND_URL + "?q=" + encodeURIComponent(question))
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        answerDiv.textContent = data.answer;
+                        if ("speechSynthesis" in window) {
+                            const utter = new SpeechSynthesisUtterance(data.answer);
+                            utter.lang = "fr-FR";
+                            window.speechSynthesis.speak(utter);
+                        }
+                    })
+                    .catch(function() {
+                        answerDiv.textContent = "Service indisponible (le service Render peut mettre "
+                            + "30-60s à se réveiller s'il était endormi — réessayez).";
+                    });
+            }
+
+            sendBtn.addEventListener("click", function() { ask(input.value); });
+            input.addEventListener("keydown", function(e) { if (e.key === "Enter") ask(input.value); });
+
+            copyBtn.addEventListener("click", function() {
+                const text = answerDiv.textContent || "";
+                if (!text) return;
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(text).then(function() {
+                        const original = copyBtn.textContent;
+                        copyBtn.textContent = "✅ Copié";
+                        setTimeout(function() { copyBtn.textContent = original; }, 1500);
+                    });
+                }
+            });
+
+            clearBtn.addEventListener("click", function() {
+                input.value = "";
+                answerDiv.textContent = "";
+                if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+            });
+
+            const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (SpeechRecognitionImpl) {
+                const recognition = new SpeechRecognitionImpl();
+                recognition.lang = "fr-FR";
+                recognition.interimResults = false;
+                micBtn.addEventListener("click", function() {
+                    micBtn.textContent = "🔴";
+                    recognition.start();
+                });
+                recognition.addEventListener("result", function(event) {
+                    const transcript = event.results[0][0].transcript;
+                    input.value = transcript;
+                    ask(transcript);
+                });
+                recognition.addEventListener("end", function() { micBtn.textContent = "🎤"; });
+                recognition.addEventListener("error", function() { micBtn.textContent = "🎤"; });
+            } else {
+                micBtn.style.display = "none";
+            }
+        })();
+        {% endmacro %}
+        """
+    )
+
+    def __init__(self, backend_url: str):
+        super().__init__()
+        self._name = "QaWidget"
+        self.backend_url = backend_url
+
+
+def _add_qa_widget(m: folium.Map) -> None:
+    _QaWidget(QA_BACKEND_URL).add_to(m)
 
 
 def build_map(output_path: Path = OUTPUT_PATH) -> Path:
