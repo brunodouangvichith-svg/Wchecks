@@ -62,9 +62,16 @@ MAX_RETRIES = 3
 RETRY_BACKOFF_SECONDS = 8
 
 
-def search_articles(keywords: list[str], timespan: str = "1d", max_records: int = 250) -> list[dict]:
+def search_articles(
+    keywords: list[str], timespan: str = "1d", max_records: int = 250, source_lang: str = "english",
+) -> list[dict]:
     """
     Recherche des articles GDELT correspondant à l'un des mots-clés donnés.
+
+    `source_lang` (défaut "english") restreint aux sources dans cette langue via le
+    modificateur `sourcelang:` de la Doc API — évite d'avoir des titres dans des
+    langues variées à traduire après coup. Passer `None` pour désactiver le filtre
+    (toutes langues, comme avant l'ajout de ce paramètre).
 
     Retourne une liste de dicts prêts pour la base :
     {event_id, date, pays, lat, lon, titre, ton, url}
@@ -72,6 +79,8 @@ def search_articles(keywords: list[str], timespan: str = "1d", max_records: int 
     ton = None, voir limite documentée en tête de module).
     """
     query = "(" + " OR ".join(f'"{kw}"' if " " in kw else kw for kw in keywords) + ")"
+    if source_lang:
+        query += f" sourcelang:{source_lang}"
     params = {
         "query": query,
         "mode": "ArtList",
