@@ -45,8 +45,16 @@ FREQUENCIES_MINUTES = {
 GDELT_KEYWORDS_CONFLICTS = [
     "oil", "pipeline", "OPEC", "sanctions", "war", "attack on infrastructure",
 ]
+# NB : volontairement pas de synonymes trop génériques (crise, désaccord,
+# dissension, division, friction/frottement, malaise, tiraillement, trouble) —
+# ce sont des mots-clés de recherche GDELT (correspondance de texte, pas de
+# concept), et ces termes matcheraient massivement des articles sans rapport
+# (une "division" militaire/corporate/sportive, un "trouble" médical/juridique,
+# une "friction" mécanique...), noyant le signal réel sous du bruit.
 GDELT_KEYWORDS_SOCIAL_TENSIONS = [
-    "protest", "strike", "riot", "social unrest", "manifestation", "grève générale",
+    "protest", "strike", "riot", "social unrest", "manifestation", "manifestations",
+    "grève générale", "grèves", "troubles sociaux", "agitation sociale",
+    "perturbations sociales", "désordre social", "conflits sociaux",
 ]
 GDELT_KEYWORDS_MILITARY = [
     "drone strike", "missile test", "hypersonic missile", "military drill",
