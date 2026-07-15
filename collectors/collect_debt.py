@@ -7,11 +7,16 @@ clients/imf_client.py pour le détail du calcul.
 Remplace l'indicateur World Bank GC.DOD.TOTL.GD.ZS initialement prévu : sa
 couverture s'est révélée trop incomplète pour les économies avancées (voir
 clients/imf_client.py pour le détail).
+
+PAS filtré sur config.MONITORED_COUNTRIES (contrairement aux autres
+collectors World Bank/IMF) : la source est gratuite et couvre quasiment tous
+les pays du monde sans coût supplémentaire, donc collectée pour tous les vrais
+pays/territoires renvoyés par get_general_government_debt() (qui exclut déjà
+les agrégats régionaux du WEO).
 """
 
 import logging
 
-import config
 from clients.imf_client import get_general_government_debt
 from clients.neon_client import upsert_generic
 
@@ -28,7 +33,6 @@ def run() -> int:
             "dette_montant_milliards_usd": d["montant_milliards_usd"],
         }
         for d in data
-        if d["pays_code"] in config.MONITORED_COUNTRIES
     ]
     return upsert_generic("country_debt", rows)
 
