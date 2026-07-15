@@ -5,7 +5,7 @@ rich
 folium
 websockets
 feedparser
-psycopg[binary]
+psycopg[binary,pool]
 apscheduler
 openpyxl
 pdfplumber

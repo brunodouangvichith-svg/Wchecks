@@ -28,7 +28,7 @@ import json
 import logging
 from datetime import datetime, timezone
 
-from clients.neon_client import get_client, upsert_generic
+from clients.neon_client import get_connection, upsert_generic
 
 logger = logging.getLogger(__name__)
 
@@ -78,13 +78,13 @@ def _normalize(values: dict[str, float]) -> dict[str, float]:
 
 def compute_scores() -> list[dict]:
     """Calcule le score de risque de chaque pays ayant au moins une dimension disponible."""
-    conn = get_client()
     raw_dimensions: dict[str, dict[str, float]] = {}
-    with conn.cursor() as cur:
-        for dim, (table, col) in LATEST_VALUE_DIMENSIONS.items():
-            raw_dimensions[dim] = _latest_per_country(cur, table, col)
-        for dim, table in EVENT_COUNT_DIMENSIONS.items():
-            raw_dimensions[dim] = _event_counts(cur, table)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            for dim, (table, col) in LATEST_VALUE_DIMENSIONS.items():
+                raw_dimensions[dim] = _latest_per_country(cur, table, col)
+            for dim, table in EVENT_COUNT_DIMENSIONS.items():
+                raw_dimensions[dim] = _event_counts(cur, table)
 
     normalized = {dim: _normalize(vals) for dim, vals in raw_dimensions.items()}
 

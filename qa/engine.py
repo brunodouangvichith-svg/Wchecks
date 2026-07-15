@@ -11,7 +11,7 @@ réponse plausible.
 
 import logging
 
-from clients.neon_client import get_client
+from clients.neon_client import get_connection
 from mapping.country_mapping import COUNTRY_NAME_TO_ISO3
 
 logger = logging.getLogger(__name__)
@@ -152,13 +152,13 @@ def answer_question(question: str) -> str:
     if not matched_handlers:
         matched_handlers = _DEFAULT_HANDLERS
 
-    conn = get_client()
     answers = []
-    with conn.cursor() as cur:
-        for handler in matched_handlers:
-            result = handler(cur, iso3)
-            if result:
-                answers.append(result)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            for handler in matched_handlers:
+                result = handler(cur, iso3)
+                if result:
+                    answers.append(result)
 
     if not answers:
         return f"Aucune donnée trouvée pour {country_name} sur cette question."

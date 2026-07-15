@@ -7,12 +7,23 @@ aucun collector n'importe `psycopg` directement.
 Contrairement à Firestore, Postgres a de vraies contraintes UNIQUE (voir
 db/schema.sql) : l'anti-doublons passe par un INSERT ... ON CONFLICT (...)
 DO UPDATE natif, pas par un ID de document dérivé/haché.
+
+CONCURRENCE : le service Render fait tourner le scheduler (jobs dans des threads
+APScheduler) ET le serveur HTTP /ask (qa/engine.py) dans le même process. Une
+connexion psycopg unique et partagée entre threads n'est PAS sûre — deux threads
+qui exécutent des requêtes en même temps sur la même connexion corrompent le
+protocole (constaté en pratique : le endpoint /ask échouait par intermittence en
+production alors qu'il fonctionnait toujours en local, seul environnement où le
+scheduler restait généralement inactif au moment du test). D'où l'usage d'un vrai
+pool de connexions (`psycopg_pool.ConnectionPool`) : chaque opération récupère sa
+propre connexion via `get_connection()`, utilisée dans un `with get_connection()
+as conn:` — jamais de connexion globale partagée sans retour au pool.
 """
 
 import logging
 
-import psycopg
 from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
 
 import config
 
@@ -78,20 +89,29 @@ ORDER_FIELD = {
     "risk_scores": "date_calcul",
 }
 
-_conn: psycopg.Connection | None = None
+_pool: ConnectionPool | None = None
 
 
-def get_client() -> psycopg.Connection:
-    """Retourne une connexion Postgres unique (lazy init, reconnecte si fermée)."""
-    global _conn
-    if _conn is None or _conn.closed:
+def _get_pool() -> ConnectionPool:
+    global _pool
+    if _pool is None:
         if not config.DATABASE_URL:
             raise RuntimeError(
                 "DATABASE_URL manquant : renseignez le fichier .env (voir .env.example). "
                 "Projet gratuit : https://neon.tech"
             )
-        _conn = psycopg.connect(config.DATABASE_URL)
-    return _conn
+        _pool = ConnectionPool(config.DATABASE_URL, min_size=1, max_size=10, open=True)
+    return _pool
+
+
+def get_connection():
+    """
+    Context manager retournant une connexion issue du pool (thread-safe) : à
+    utiliser dans un `with get_connection() as conn:` par tout module ayant
+    besoin d'un accès direct au curseur (scoring/risk_score.py, viz/build_map.py,
+    qa/engine.py). Ne jamais garder une connexion en dehors de ce `with`.
+    """
+    return _get_pool().connection()
 
 
 def upsert_generic(table_name: str, rows: list[dict]) -> int:
@@ -133,10 +153,10 @@ def upsert_generic(table_name: str, rows: list[dict]) -> int:
 
     params_seq = [{c: row.get(c) for c in columns} for row in rows]
 
-    conn = get_client()
-    with conn.cursor() as cur:
-        cur.executemany(sql, params_seq)
-    conn.commit()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.executemany(sql, params_seq)
+        conn.commit()
 
     logger.info("upsert_generic: %d ligne(s) envoyée(s) vers '%s'", len(rows), table_name)
     return len(rows)
@@ -145,16 +165,16 @@ def upsert_generic(table_name: str, rows: list[dict]) -> int:
 def get_latest(table_name: str) -> dict | None:
     """Retourne la ligne la plus récente de `table_name` (par son champ de date/période), ou None."""
     order_col = ORDER_FIELD[table_name]
-    conn = get_client()
-    with conn.cursor(row_factory=dict_row) as cur:
-        cur.execute(f"SELECT * FROM {table_name} ORDER BY {order_col} DESC NULLS LAST LIMIT 1")
-        return cur.fetchone()
+    with get_connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(f"SELECT * FROM {table_name} ORDER BY {order_col} DESC NULLS LAST LIMIT 1")
+            return cur.fetchone()
 
 
 def get_history(table_name: str, n: int) -> list[dict]:
     """Retourne les N lignes les plus récentes de `table_name`, plus récentes en premier."""
     order_col = ORDER_FIELD[table_name]
-    conn = get_client()
-    with conn.cursor(row_factory=dict_row) as cur:
-        cur.execute(f"SELECT * FROM {table_name} ORDER BY {order_col} DESC NULLS LAST LIMIT %s", (n,))
-        return cur.fetchall()
+    with get_connection() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(f"SELECT * FROM {table_name} ORDER BY {order_col} DESC NULLS LAST LIMIT %s", (n,))
+            return cur.fetchall()

@@ -25,7 +25,7 @@ import pandas as pd
 from folium.plugins import MarkerCluster
 
 import config
-from clients.neon_client import ORDER_FIELD, get_client
+from clients.neon_client import ORDER_FIELD, get_connection
 from mapping.country_mapping import COUNTRY_NAME_TO_ISO3
 
 logger = logging.getLogger(__name__)
@@ -296,24 +296,24 @@ def _add_qa_widget(m: folium.Map) -> None:
 
 
 def build_map(output_path: Path = OUTPUT_PATH) -> Path:
-    conn = get_client()
     geojson_data = _load_enriched_geojson()
     m = folium.Map(location=[20, 10], zoom_start=2, tiles="OpenStreetMap")
 
-    with conn.cursor() as cur:
-        for table, color, label in POINT_LAYERS:
-            _add_point_layer(m, cur, table, color, label)
-        _add_maritime_layer(m, cur)
-        _add_statements_layer(m, cur)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            for table, color, label in POINT_LAYERS:
+                _add_point_layer(m, cur, table, color, label)
+            _add_maritime_layer(m, cur)
+            _add_statements_layer(m, cur)
 
-        for table, col, legend, scheme in CHOROPLETH_SPECS:
-            _add_choropleth(m, cur, table, col, legend, scheme, geojson_data)
+            for table, col, legend, scheme in CHOROPLETH_SPECS:
+                _add_choropleth(m, cur, table, col, legend, scheme, geojson_data)
 
-        for mineral in config.STRATEGIC_MINERALS:
-            _add_choropleth(
-                m, cur, "minerals_production", "volume_tonnes",
-                f"Production de {mineral} (tonnes)", "YlOrBr", geojson_data, mineral=mineral,
-            )
+            for mineral in config.STRATEGIC_MINERALS:
+                _add_choropleth(
+                    m, cur, "minerals_production", "volume_tonnes",
+                    f"Production de {mineral} (tonnes)", "YlOrBr", geojson_data, mineral=mineral,
+                )
 
     folium.LayerControl(collapsed=False).add_to(m)
     _add_qa_widget(m)
