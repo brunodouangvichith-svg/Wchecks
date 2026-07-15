@@ -248,6 +248,12 @@ Positionné en bas, centré horizontalement sur la carte. Deux pièges déjà
     masque automatiquement si l'API n'existe pas dans le navigateur, l'entrée
     texte restant utilisable partout. La synthèse vocale (`speechSynthesis`) a
     une compatibilité plus large.
+
+    Compatibilité mobile : largeur en `min(280px, calc(100vw - 24px))` (une
+    largeur fixe déborderait sur un écran de téléphone, souvent 320-390px),
+    boutons avec cible tactile ≥36px, police d'entrée à 16px (en-dessous, Safari/
+    Chrome iOS zoome automatiquement la page au focus d'un champ texte), et
+    `env(safe-area-inset-bottom)` pour ne pas passer sous la barre gestuelle.
     """
 
     _template = Template(
@@ -265,30 +271,42 @@ Positionné en bas, centré horizontalement sur la carte. Deux pièges déjà
             var map = {{ this._parent.get_name() }};
             var container = L.DomUtil.create('div', 'qa-widget-control', map.getContainer());
             container.style.position = 'absolute';
-            container.style.bottom = '20px';
+            // env(safe-area-inset-bottom) : évite que la barre gestuelle des
+            // téléphones (iOS notamment) ne recouvre le bas du widget.
+            container.style.bottom = 'calc(20px + env(safe-area-inset-bottom, 0px))';
             container.style.left = '50%';
             container.style.transform = 'translateX(-50%)';
             container.style.zIndex = 1000;
             container.style.background = 'white';
-            container.style.borderRadius = '8px';
+            container.style.borderRadius = '10px';
             container.style.boxShadow = '0 2px 10px rgba(0,0,0,0.35)';
             container.style.padding = '12px';
-            container.style.width = '280px';
+            // width: min(...) plutôt qu'une largeur fixe — un téléphone (souvent
+            // 320-390px de large) ne peut pas afficher 280px + marges sans
+            // déborder ; sur desktop la carte reste à 280px.
+            container.style.width = 'min(280px, calc(100vw - 24px))';
+            container.style.maxWidth = 'calc(100vw - 24px)';
+            container.style.boxSizing = 'border-box';
             container.style.fontFamily = 'sans-serif';
             container.style.fontSize = '13px';
             container.style.color = '#222';
             container.innerHTML =
                 '<div style="font-weight:bold; margin-bottom:6px;">🎙️ Poser une question sur un pays</div>' +
                 '<div style="display:flex; gap:6px; margin-bottom:8px;">' +
+                // font-size 16px sur l'input : en-dessous, Safari/Chrome iOS zoome
+                // automatiquement la page au focus, ce qui casse la mise en page.
+                // min-height 36px sur les boutons : cible tactile confortable au doigt.
                 '<input id="qa-input" type="text" placeholder="ex : dette de la France ?" ' +
-                'style="flex:1; padding:4px; min-width:0;">' +
-                '<button id="qa-mic-btn" title="Question vocale" style="cursor:pointer;">🎤</button>' +
-                '<button id="qa-send-btn" title="Envoyer" style="cursor:pointer;">➤</button>' +
+                'style="flex:1; padding:6px; min-width:0; font-size:16px; box-sizing:border-box;">' +
+                '<button id="qa-mic-btn" title="Question vocale" ' +
+                'style="cursor:pointer; min-width:36px; min-height:36px; font-size:16px;">🎤</button>' +
+                '<button id="qa-send-btn" title="Envoyer" ' +
+                'style="cursor:pointer; min-width:36px; min-height:36px; font-size:16px;">➤</button>' +
                 '</div>' +
-                '<div id="qa-answer" style="max-height:160px; overflow-y:auto; margin-bottom:6px;"></div>' +
+                '<div id="qa-answer" style="max-height:160px; overflow-y:auto; margin-bottom:8px;"></div>' +
                 '<div style="display:flex; gap:6px;">' +
-                '<button id="qa-copy-btn" style="cursor:pointer; flex:1;">📋 Copier</button>' +
-                '<button id="qa-clear-btn" style="cursor:pointer; flex:1;">🗑️ Effacer</button>' +
+                '<button id="qa-copy-btn" style="cursor:pointer; flex:1; min-height:36px; font-size:14px;">📋 Copier</button>' +
+                '<button id="qa-clear-btn" style="cursor:pointer; flex:1; min-height:36px; font-size:14px;">🗑️ Effacer</button>' +
                 '</div>';
             L.DomEvent.disableClickPropagation(container);
             L.DomEvent.disableScrollPropagation(container);
@@ -396,7 +414,10 @@ def build_map(output_path: Path = OUTPUT_PATH) -> Path:
                     f"Production de {mineral} (tonnes)", "YlOrBr", geojson_data, mineral=mineral,
                 )
 
-    folium.LayerControl(collapsed=False).add_to(m)
+    # collapsed=True (icône repliée, dépliée au tap/hover) plutôt qu'ouvert en
+    # permanence : sur un écran de téléphone, la liste dépliée de toutes les
+    # couches recouvrirait la quasi-totalité de la carte.
+    folium.LayerControl(collapsed=True).add_to(m)
     _add_qa_widget(m)
     m.save(str(output_path))
     logger.info("build_map: carte générée -> %s", output_path)
