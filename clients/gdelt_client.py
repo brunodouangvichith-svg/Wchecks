@@ -13,10 +13,15 @@ le pays source d'un article, mais ni coordonnées précises ni tonalité par art
   du MÉDIA qui publie l'article, pas celui de l'événement — un article sur le
   détroit d'Ormuz publié par un média américain se retrouvait donc plaqué sur
   Washington. Pour les zones stratégiques (détroits, mers) qui ne sont pas des
-  pays, on détecte leur mention dans le TITRE de l'article (voir ZONE_KEYWORDS)
-  et on utilise alors le centre de la zone (config.STRATEGIC_ZONES) à la place du
-  centroïde pays — toujours une approximation (centre de zone, pas coordonnées
-  exactes de l'événement), mais nettement plus proche de la réalité ;
+  pays, on détecte leur mention dans le TITRE et l'URL de l'article (voir
+  ZONE_KEYWORDS et _detect_zone — le titre de la Doc API est parfois tronqué,
+  l'URL sert de filet de sécurité) et on utilise alors le centre de la zone
+  (config.STRATEGIC_ZONES) à la place du centroïde pays — toujours une
+  approximation (centre de zone, pas coordonnées exactes de l'événement), mais
+  nettement plus proche de la réalité. Le champ `pays` est mis à `None` (plutôt
+  que le pays du média) dès qu'une zone est détectée, pour éviter qu'un
+  événement de zone stratégique soit compté comme un conflit du pays du média
+  qui l'a rapporté (qa/engine.py filtre les conflits par ce champ) ;
 - la tonalité ("ton") n'est pas disponible via cette API gratuite et reste `None` —
   documenté comme limite connue plutôt que remplacé par un proxy inventé.
 """
@@ -49,10 +54,20 @@ def _zone_center(zone_name: str) -> tuple[float, float]:
     return (zone["lat_min"] + zone["lat_max"]) / 2, (zone["lon_min"] + zone["lon_max"]) / 2
 
 
-def _detect_zone(title: str | None) -> str | None:
-    title_lower = (title or "").lower()
+def _detect_zone(title: str | None, url: str | None = None) -> str | None:
+    """
+    Cherche un mot-clé de zone dans le TITRE et dans l'URL (slug) de l'article.
+
+    Le champ "title" de la Doc API GDELT est parfois tronqué à un fragment de la
+    vraie manchette (constaté sur un article dont le titre stocké était juste
+    "Attacks on commercial vessels", sans "Hormuz", alors que l'URL contenait
+    bien "...-hormuz-strikes") — l'URL sert de filet de sécurité, les tirets du
+    slug étant remplacés par des espaces pour matcher les mots-clés multi-mots
+    (ex. "red sea", "gulf of mexico").
+    """
+    combined = f"{title or ''} {(url or '').replace('-', ' ')}".lower()
     for zone_name, keywords in ZONE_KEYWORDS.items():
-        if any(kw in title_lower for kw in keywords):
+        if any(kw in combined for kw in keywords):
             return zone_name
     return None
 
@@ -102,9 +117,17 @@ def search_articles(
         title = article.get("title")
         iso3, lat, lon = resolve_country(article.get("sourcecountry", ""))
 
-        zone_name = _detect_zone(title)
+        zone_name = _detect_zone(title, url)
         if zone_name is not None:
             lat, lon = _zone_center(zone_name)
+            # `iso3` ici est le pays du MÉDIA qui publie l'article, pas celui de
+            # l'événement (cf. limite documentée en tête de module) — une frappe
+            # près du détroit d'Ormuz relayée par un média français ne doit pas
+            # être comptée comme un conflit "France" par qa/engine.py, qui filtre
+            # sur cette colonne `pays`. On l'efface (None) dès qu'une zone
+            # stratégique est détectée : la position (lat/lon) reste correcte
+            # sur la carte, mais l'événement n'est plus attribuable à aucun pays.
+            iso3 = None
 
         rows.append(
             {
