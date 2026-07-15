@@ -182,6 +182,9 @@ class _HealthHandler(http.server.BaseHTTPRequestHandler):
 
             info["neon_client_config_module_id"] = id(_nc.config)
             info["neon_client_config_DATABASE_URL_present"] = bool(_nc.config.DATABASE_URL)
+            info["pool_exists"] = _nc._pool is not None
+            if _nc._pool is not None:
+                info["pool_stats"] = _nc._pool.get_stats()
         except Exception as exc:
             info["neon_client_import_error"] = f"{type(exc).__name__}: {exc}"
 
