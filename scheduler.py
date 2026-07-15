@@ -155,11 +155,42 @@ class _HealthHandler(http.server.BaseHTTPRequestHandler):
         if parsed.path == "/ask":
             self._handle_ask(parsed)
             return
+        if parsed.path == "/debug":
+            self._handle_debug()
+            return
 
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.end_headers()
         self.wfile.write(b"OK - scheduler actif")
+
+    def _handle_debug(self) -> None:
+        """Diagnostic temporaire (à retirer une fois le bug /ask résolu) : n'expose
+        aucune valeur de secret, seulement présence/longueur/identité d'objet."""
+        import os as _os
+
+        info = {
+            "env_DATABASE_URL_present": bool(_os.environ.get("DATABASE_URL")),
+            "env_DATABASE_URL_len": len(_os.environ.get("DATABASE_URL") or ""),
+            "config_DATABASE_URL_present": bool(config.DATABASE_URL),
+            "config_DATABASE_URL_len": len(config.DATABASE_URL or ""),
+            "config_module_id": id(config),
+            "pid": _os.getpid(),
+        }
+        try:
+            from clients import neon_client as _nc
+
+            info["neon_client_config_module_id"] = id(_nc.config)
+            info["neon_client_config_DATABASE_URL_present"] = bool(_nc.config.DATABASE_URL)
+        except Exception as exc:
+            info["neon_client_import_error"] = f"{type(exc).__name__}: {exc}"
+
+        body = json.dumps(info).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body)
 
     def _handle_ask(self, parsed) -> None:
         question = parse_qs(parsed.query).get("q", [""])[0]
