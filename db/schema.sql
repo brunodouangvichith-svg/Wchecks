@@ -53,6 +53,8 @@ CREATE TABLE IF NOT EXISTS energy_conflicts (
     titre TEXT,
     ton NUMERIC,
     url TEXT,
+    source_verifiee BOOLEAN,
+    resume TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (event_id)
 );
@@ -68,6 +70,8 @@ CREATE TABLE IF NOT EXISTS social_tensions (
     titre TEXT,
     ton NUMERIC,
     url TEXT,
+    source_verifiee BOOLEAN,
+    resume TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (event_id)
 );
@@ -83,6 +87,8 @@ CREATE TABLE IF NOT EXISTS military_activity (
     titre TEXT,
     ton NUMERIC,
     url TEXT,
+    source_verifiee BOOLEAN,
+    resume TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (event_id)
 );
@@ -155,6 +161,8 @@ CREATE TABLE IF NOT EXISTS official_statements (
     titre TEXT,
     extrait TEXT,
     langue TEXT,
+    source_verifiee BOOLEAN,
+    resume TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (url)
 );

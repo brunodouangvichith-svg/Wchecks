@@ -95,10 +95,17 @@ def _add_point_layer(m: folium.Map, cur, table: str, color: str, label: str) -> 
     # (icônes), pas les CircleMarker (calques vectoriels) — d'où le changement de type.
     fg = folium.FeatureGroup(name=label, show=(table == "energy_conflicts"))
     cluster = MarkerCluster().add_to(fg)
-    cur.execute(f"SELECT lat, lon, titre, url, date FROM {table} WHERE lat IS NOT NULL AND lon IS NOT NULL")
+    cur.execute(
+        f"SELECT lat, lon, titre, url, date, source_verifiee, resume FROM {table} "
+        f"WHERE lat IS NOT NULL AND lon IS NOT NULL"
+    )
     rows = cur.fetchall()
-    for lat, lon, titre, url, date in rows:
+    for lat, lon, titre, url, date, verifiee, resume in rows:
         popup_html = f"<b>{html.escape(titre or '(sans titre)')}</b><br>{date or ''}"
+        if resume:
+            popup_html += f"<br>{html.escape(resume)}"
+        if verifiee:
+            popup_html += "<br>✅ source vérifiée (scraping)"
         if url:
             popup_html += f'<br><a href="{html.escape(url)}" target="_blank">source</a>'
         folium.Marker(
@@ -135,14 +142,18 @@ def _add_maritime_layer(m: folium.Map, cur) -> None:
 
 def _add_statements_layer(m: folium.Map, cur) -> None:
     fg = folium.FeatureGroup(name="Déclarations officielles", show=False)
-    cur.execute("SELECT institution, titre, url, date FROM official_statements")
+    cur.execute("SELECT institution, titre, url, date, source_verifiee, resume FROM official_statements")
     rows = cur.fetchall()
     n = 0
-    for institution, titre, url, date in rows:
+    for institution, titre, url, date, verifiee, resume in rows:
         location = INSTITUTION_LOCATIONS.get(institution)
         if location is None:
             continue
         popup_html = f"<b>{html.escape(titre or '(sans titre)')}</b><br>{date or ''}"
+        if resume:
+            popup_html += f"<br>{html.escape(resume)}"
+        if verifiee:
+            popup_html += "<br>✅ source vérifiée (scraping)"
         if url:
             popup_html += f'<br><a href="{html.escape(url)}" target="_blank">source</a>'
         folium.CircleMarker(

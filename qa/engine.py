@@ -146,11 +146,14 @@ def _handle_conflicts_list(cur, iso3: str) -> str | None:
         ("military_activity", "activité militaire"),
     ]:
         cur.execute(
-            f"SELECT date, titre, url FROM {table} "
+            f"SELECT date, titre, url, source_verifiee, resume FROM {table} "
             f"WHERE pays=%s AND titre IS NOT NULL ORDER BY date DESC LIMIT 5",
             (iso3,),
         )
-        events.extend((label, date, titre, url) for date, titre, url in cur.fetchall())
+        events.extend(
+            (label, date, titre, url, verifiee, resume)
+            for date, titre, url, verifiee, resume in cur.fetchall()
+        )
 
     if not events:
         return None
@@ -158,9 +161,16 @@ def _handle_conflicts_list(cur, iso3: str) -> str | None:
     events.sort(key=lambda e: e[1] or "", reverse=True)
     events = events[:8]
 
+    # source_verifiee : la page a été scrapée avec succès au moment de la
+    # collecte (voir clients/article_scraper.py) — confirme que le lien est
+    # réel, pas mort/bloqué, plutôt que de faire confiance aveuglément à GDELT.
+    # resume : extrait des premières phrases de la page scrapée (voir
+    # article_scraper.summarize()), affiché à la place du seul titre quand
+    # disponible — plus informatif qu'un titre parfois tronqué par GDELT.
     lines = [
-        f"[{label}, {date.strftime('%d/%m/%Y') if date else 'date inconnue'}] {titre} ({url})"
-        for label, date, titre, url in events
+        f"[{label}, {date.strftime('%d/%m/%Y') if date else 'date inconnue'}"
+        f"{', source vérifiée' if verifiee else ''}] {resume or titre} ({url})"
+        for label, date, titre, url, verifiee, resume in events
     ]
     return (
         "derniers événements recensés (couverture presse GDELT, pas un décompte exhaustif) :\n- "

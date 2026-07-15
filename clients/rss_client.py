@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 import feedparser
 import requests
 
+from clients.article_scraper import summarize, verify_and_extract
+
 logger = logging.getLogger(__name__)
 
 TIMEOUT_SECONDS = 20
@@ -45,6 +47,13 @@ def fetch_statements(feeds: dict[str, str], keywords: list[str]) -> list[dict]:
             if not url:
                 continue
 
+            # Scraping best-effort de la page (voir clients/article_scraper.py) :
+            # confirme que la déclaration officielle est bien accessible (pas un
+            # lien mort/retiré depuis) plutôt que de faire confiance aveuglément
+            # au flux RSS, et fournit un résumé du texte complet de la page
+            # (potentiellement plus complet que le résumé RSS lui-même).
+            verified, article_text = verify_and_extract(url)
+
             rows.append(
                 {
                     "url": url,
@@ -53,6 +62,8 @@ def fetch_statements(feeds: dict[str, str], keywords: list[str]) -> list[dict]:
                     "titre": title,
                     "extrait": summary[:1000] if summary else None,
                     "langue": entry.get("language"),
+                    "source_verifiee": verified,
+                    "resume": summarize(article_text),
                 }
             )
 

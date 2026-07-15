@@ -32,6 +32,7 @@ import time
 import requests
 
 import config
+from clients.article_scraper import summarize, verify_and_extract
 from mapping.country_mapping import resolve_country
 
 logger = logging.getLogger(__name__)
@@ -54,18 +55,19 @@ def _zone_center(zone_name: str) -> tuple[float, float]:
     return (zone["lat_min"] + zone["lat_max"]) / 2, (zone["lon_min"] + zone["lon_max"]) / 2
 
 
-def _detect_zone(title: str | None, url: str | None = None) -> str | None:
+def _detect_zone(title: str | None, url: str | None = None, article_text: str | None = None) -> str | None:
     """
-    Cherche un mot-clé de zone dans le TITRE et dans l'URL (slug) de l'article.
+    Cherche un mot-clé de zone dans le TITRE, l'URL (slug) et le TEXTE COMPLET de
+    l'article (si disponible via clients/article_scraper.py).
 
     Le champ "title" de la Doc API GDELT est parfois tronqué à un fragment de la
     vraie manchette (constaté sur un article dont le titre stocké était juste
     "Attacks on commercial vessels", sans "Hormuz", alors que l'URL contenait
-    bien "...-hormuz-strikes") — l'URL sert de filet de sécurité, les tirets du
-    slug étant remplacés par des espaces pour matcher les mots-clés multi-mots
-    (ex. "red sea", "gulf of mexico").
+    bien "...-hormuz-strikes") — l'URL et le texte scrapé de la page servent de
+    filet de sécurité, les tirets du slug étant remplacés par des espaces pour
+    matcher les mots-clés multi-mots (ex. "red sea", "gulf of mexico").
     """
-    combined = f"{title or ''} {(url or '').replace('-', ' ')}".lower()
+    combined = f"{title or ''} {(url or '').replace('-', ' ')} {article_text or ''}".lower()
     for zone_name, keywords in ZONE_KEYWORDS.items():
         if any(kw in combined for kw in keywords):
             return zone_name
@@ -110,6 +112,7 @@ def search_articles(
 
     articles = payload.get("articles", [])
     rows = []
+    n_verified = 0
     for article in articles:
         url = article.get("url")
         if not url:
@@ -117,7 +120,15 @@ def search_articles(
         title = article.get("title")
         iso3, lat, lon = resolve_country(article.get("sourcecountry", ""))
 
-        zone_name = _detect_zone(title, url)
+        # Scraping best-effort de la page source (voir clients/article_scraper.py) :
+        # confirme que le lien est réel (pas mort/bloqué) et fournit le texte
+        # complet de l'article, un signal de détection de zone bien plus fiable
+        # que le titre GDELT (parfois tronqué) ou l'URL seuls.
+        verified, article_text = verify_and_extract(url)
+        if verified:
+            n_verified += 1
+
+        zone_name = _detect_zone(title, url, article_text)
         if zone_name is not None:
             lat, lon = _zone_center(zone_name)
             # `iso3` ici est le pays du MÉDIA qui publie l'article, pas celui de
@@ -139,10 +150,15 @@ def search_articles(
                 "titre": title,
                 "ton": None,
                 "url": url,
+                "source_verifiee": verified,
+                "resume": summarize(article_text),
             }
         )
 
-    logger.info("search_articles(%s) : %d article(s) récupéré(s)", keywords, len(rows))
+    logger.info(
+        "search_articles(%s) : %d article(s) récupéré(s), %d source(s) vérifiée(s) par scraping",
+        keywords, len(rows), n_verified,
+    )
     return rows
 
 
