@@ -38,7 +38,7 @@ TABLE_COLUMNS = {
     "energy_conflicts": ["event_id", "date", "pays", "lat", "lon", "titre", "ton", "url"],
     "social_tensions": ["event_id", "date", "pays", "lat", "lon", "titre", "ton", "url"],
     "military_activity": ["event_id", "date", "pays", "lat", "lon", "titre", "ton", "url"],
-    "country_debt": ["pays_code", "annee", "dette_pct_pib"],
+    "country_debt": ["pays_code", "annee", "dette_pct_pib", "dette_montant_milliards_usd"],
     "country_economy": ["pays_code", "annee", "impots_pct_pib", "chomage_pct", "inflation_pct"],
     "defense_budget": ["pays_code", "annee", "budget_pct_pib"],
     "arms_transfers": ["pays_code", "annee", "direction", "valeur_tiv"],

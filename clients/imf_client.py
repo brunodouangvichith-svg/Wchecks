@@ -28,35 +28,69 @@ logger = logging.getLogger(__name__)
 BASE_URL = "https://www.imf.org/external/datamapper/api/v1"
 TIMEOUT_SECONDS = 30
 DEBT_INDICATOR = "GGXWDG_NGDP"  # General government gross debt, % of GDP (WEO)
+GDP_INDICATOR = "NGDPD"  # GDP, current prices, en milliards de USD (WEO)
 
 
-def get_general_government_debt() -> list[dict]:
-    """
-    Récupère la dette publique générale (% du PIB) pour tous les pays couverts
-    par le WEO du FMI.
-
-    Retourne une liste de dicts {"pays_code": str, "annee": int, "valeur": float},
-    en excluant les années de projection (postérieures à l'année civile précédente).
-    """
-    response = requests.get(f"{BASE_URL}/{DEBT_INDICATOR}", timeout=TIMEOUT_SECONDS)
+def _get_indicator(indicator: str) -> dict[str, dict[str, float]]:
+    """Retourne {iso3: {année (str): valeur}} pour un indicateur WEO, années de
+    projection (postérieures à l'année civile précédente) exclues."""
+    response = requests.get(f"{BASE_URL}/{indicator}", timeout=TIMEOUT_SECONDS)
     response.raise_for_status()
     payload = response.json()
 
     last_actual_year = date.today().year - 1
-    country_values = payload.get("values", {}).get(DEBT_INDICATOR, {})
+    country_values = payload.get("values", {}).get(indicator, {})
+
+    result = {}
+    for iso3, year_values in country_values.items():
+        cleaned = {
+            year_str: float(value)
+            for year_str, value in year_values.items()
+            if value is not None and int(year_str) <= last_actual_year
+        }
+        if cleaned:
+            result[iso3] = cleaned
+    return result
+
+
+def get_general_government_debt() -> list[dict]:
+    """
+    Récupère la dette publique générale (% du PIB, indicateur GGXWDG_NGDP) et le
+    PIB nominal (milliards de USD, indicateur NGDPD) pour tous les pays couverts
+    par le WEO du FMI, et calcule le montant de dette correspondant.
+
+    L'API DataMapper ne fournit la dette publique qu'en % du PIB (aucun
+    indicateur WEO en valeur absolue) — le montant est donc dérivé par année :
+    montant_milliards_usd = pct_pib / 100 * pib_nominal_milliards_usd, calculé
+    pour CHAQUE année où les deux séries ont une valeur (conserve l'historique
+    complet par pays, pas seulement la dernière année, comme avant l'ajout du
+    montant) ; `None` si le PIB de cette année précise manque pour ce pays.
+
+    Retourne une liste de dicts {"pays_code", "annee", "valeur" (dette % PIB),
+    "montant_milliards_usd"}.
+    """
+    debt_by_country = _get_indicator(DEBT_INDICATOR)
+    gdp_by_country = _get_indicator(GDP_INDICATOR)
 
     records = []
-    for iso3, year_values in country_values.items():
-        for year_str, value in year_values.items():
-            if value is None:
-                continue
-            year = int(year_str)
-            if year > last_actual_year:
-                continue
-            records.append({"pays_code": iso3, "annee": year, "valeur": float(value)})
+    for iso3, year_values in debt_by_country.items():
+        gdp_years = gdp_by_country.get(iso3, {})
+        for year_str, pct_pib in year_values.items():
+            gdp_usd_milliards = gdp_years.get(year_str)
+            montant = pct_pib / 100 * gdp_usd_milliards if gdp_usd_milliards is not None else None
+            records.append(
+                {
+                    "pays_code": iso3,
+                    "annee": int(year_str),
+                    "valeur": pct_pib,
+                    "montant_milliards_usd": montant,
+                }
+            )
 
     logger.info(
-        "get_general_government_debt : %d valeurs récupérées (%d pays)",
-        len(records), len(country_values),
+        "get_general_government_debt : %d valeurs récupérées (%d pays), "
+        "montant calculé pour %d ligne(s) (PIB manquant pour les autres)",
+        len(records), len(debt_by_country),
+        sum(1 for r in records if r["montant_milliards_usd"] is not None),
     )
     return records

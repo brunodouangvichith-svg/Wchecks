@@ -32,15 +32,19 @@ def _find_country(question: str) -> tuple[str, str] | None:
 
 def _handle_debt(cur, iso3: str) -> str | None:
     cur.execute(
-        "SELECT annee, dette_pct_pib FROM country_debt "
+        "SELECT annee, dette_pct_pib, dette_montant_milliards_usd FROM country_debt "
         "WHERE pays_code=%s AND dette_pct_pib IS NOT NULL ORDER BY annee DESC LIMIT 1",
         (iso3,),
     )
     row = cur.fetchone()
     if not row:
         return None
-    annee, valeur = row
-    return f"la dette publique était de {float(valeur):g}% du PIB en {annee}"
+    annee, pct, montant = row
+    result = f"la dette publique était de {float(pct):g}% du PIB en {annee}"
+    if montant is not None:
+        montant_str = f"{float(montant):,.0f}".replace(",", " ")
+        result += f", soit environ {montant_str} milliards de USD"
+    return result
 
 
 def _handle_economy(cur, iso3: str) -> str | None:

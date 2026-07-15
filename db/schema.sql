@@ -87,12 +87,13 @@ CREATE TABLE IF NOT EXISTS military_activity (
     UNIQUE (event_id)
 );
 
--- 5. Dette publique des pays (% du PIB) (World Bank GC.DOD.TOTL.GD.ZS)
+-- 5. Dette publique des pays (% du PIB, et montant dérivé) (IMF WEO GGXWDG_NGDP + NGDPD)
 CREATE TABLE IF NOT EXISTS country_debt (
     id BIGSERIAL PRIMARY KEY,
     pays_code TEXT NOT NULL,
     annee INTEGER NOT NULL,
     dette_pct_pib NUMERIC,
+    dette_montant_milliards_usd NUMERIC,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (pays_code, annee)
 );

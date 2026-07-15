@@ -49,6 +49,7 @@ POINT_LAYERS = [
 # (table, colonne, légende, palette de couleurs branca)
 CHOROPLETH_SPECS = [
     ("country_debt", "dette_pct_pib", "Dette publique (% du PIB)", "Reds"),
+    ("country_debt", "dette_montant_milliards_usd", "Dette publique (milliards de USD)", "PuRd"),
     ("country_economy", "chomage_pct", "Chômage (%)", "OrRd"),
     ("country_economy", "inflation_pct", "Inflation (%)", "YlOrRd"),
     ("defense_budget", "budget_pct_pib", "Budget défense (% du PIB)", "Purples"),
