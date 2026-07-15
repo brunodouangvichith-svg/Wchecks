@@ -140,7 +140,7 @@ sans redéploiement.
 | 2 | Prix du Brent crude (spot) | EIA | quotidien |
 | 3 | Production mondiale pétrole/gaz par pays | EIA (international) | mensuel |
 | 4 | Conflits énergétiques géolocalisés | GDELT | toutes les 6h |
-| 5 | Dette publique par pays | World Bank | mensuel |
+| 5 | Dette publique par pays | IMF DataMapper (WEO) | mensuel |
 | 6 | Économie (impôts, chômage, inflation) + tensions sociales | World Bank + GDELT | mensuel / 6h |
 | 7 | Budget défense + activité militaire (proxy) + transferts d'armes | World Bank + GDELT + SIPRI | mensuel / 6h / manuel |
 | 8 | Trafic maritime (tankers, zones stratégiques) | AISstream.io | 4x/jour |
@@ -150,6 +150,16 @@ sans redéploiement.
 
 ## Limites connues (par source)
 
+- **Dette publique** : l'indicateur World Bank initialement prévu
+  (`GC.DOD.TOTL.GD.ZS`, dette du gouvernement central) s'est révélé avoir une
+  couverture très incomplète pour les économies avancées — France, Allemagne,
+  Japon renvoyaient `None` sur toute la période 2000-2025 (confirmé en
+  interrogeant directement l'API World Bank). Remplacé par l'API **IMF
+  DataMapper** (indicateur WEO `GGXWDG_NGDP`, dette publique générale, 226
+  économies couvertes). Les années au-delà de l'année civile précédente sont
+  exclues (ce sont des projections WEO, pas des données réalisées). Sur les 40
+  pays surveillés, seuls la Libye et le Yémen restent sans donnée — plausible
+  compte tenu des difficultés de collecte statistique dans ces pays.
 - **Prix de l'énergie par pays** : dimension explicitement **non intégrée**. Aucune
   API gratuite fiable et à jour ne couvre les prix consommateur par pays (indicateur
   World Bank discontinué ; l'API complète IEA est payante). Construire un proxy
@@ -192,6 +202,7 @@ sans redéploiement.
 - **EIA** (U.S. Energy Information Administration) — https://www.eia.gov/opendata/
 - **GDELT Project** — https://www.gdeltproject.org (DOC API 2.0)
 - **World Bank Open Data** — https://data.worldbank.org
+- **IMF DataMapper** (World Economic Outlook) — https://www.imf.org/external/datamapper/
 - **AISstream.io** — https://aisstream.io
 - **SIPRI Arms Transfers Database** — https://www.sipri.org/databases/armstransfers
 - **USGS National Minerals Information Center** — https://www.usgs.gov/centers/national-minerals-information-center
