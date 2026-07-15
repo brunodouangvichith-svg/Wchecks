@@ -169,9 +169,10 @@ class _HealthHandler(http.server.BaseHTTPRequestHandler):
             answer = answer_question(question) if question.strip() else "Question vide."
         except Exception as exc:
             logger.exception("/ask : échec pour la question '%s'", question)
-            # Diagnostic temporaire : seul le TYPE d'exception est exposé (jamais le
-            # message complet, qui pourrait contenir des informations de connexion).
-            answer = f"Erreur interne ({type(exc).__name__}) en traitant la question."
+            # Diagnostic temporaire : message d'erreur assaini (chaîne de connexion
+            # retirée si présente) pour identifier la cause sans exposer de secret.
+            safe_message = str(exc).replace(config.DATABASE_URL or "***", "[DATABASE_URL retirée]")
+            answer = f"Erreur interne ({type(exc).__name__}: {safe_message}) en traitant la question."
 
         body = json.dumps({"question": question, "answer": answer}).encode("utf-8")
         self.send_response(200)
