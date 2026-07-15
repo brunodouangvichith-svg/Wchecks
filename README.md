@@ -2,8 +2,9 @@
 
 Agent Python qui collecte 11 dimensions de risque énergétique et géopolitique via
 des sources 100% gratuites, les stocke dans une base PostgreSQL (Neon), les met à
-jour automatiquement en tâche de fond (Render, Background Worker), calcule un score
-de risque synthétique par pays, et les visualise sur une carte mondiale interactive.
+jour automatiquement en tâche de fond (Render, Web Service + ping externe — voir
+plus bas), calcule un score de risque synthétique par pays, et les visualise sur
+une carte mondiale interactive.
 
 ## ⚠️ Avertissement
 
@@ -24,7 +25,7 @@ officielles avant toute décision.
 GlobalChecks/
 ├── config.py                # fréquences, mots-clés, zones, pays surveillés, indicateurs
 ├── cli.py                   # consultation (--latest/--history) et déclenchement manuel
-├── scheduler.py              # APScheduler — point d'entrée du Background Worker Render
+├── scheduler.py              # APScheduler + serveur HTTP minimal — point d'entrée Render
 ├── clients/                  # accès brut à chaque source externe
 │   ├── neon_client.py         # connexion Postgres, upsert générique, lecture
 │   ├── eia_client.py          # SPR, Brent, production pétrole/gaz internationale
@@ -44,7 +45,7 @@ GlobalChecks/
 │   └── data/world_countries.geojson
 ├── data/{sipri,usgs}/         # fichiers statiques téléchargés manuellement
 ├── db/schema.sql              # schéma PostgreSQL (source de vérité)
-└── render.yaml                 # déploiement Render (Background Worker)
+└── render.yaml                 # déploiement Render (Web Service)
 ```
 
 ## Installation locale
@@ -102,17 +103,30 @@ python -m viz.build_map     # produit carte_mondiale.html
 
 ## Déploiement Render (scheduler en arrière-plan)
 
+⚠️ **Le tier gratuit de Render ne propose pas de Background Worker** ("service type
+is not available for this plan" — constaté en pratique, l'hypothèse initiale du
+projet était fausse sur ce point). `scheduler.py` est donc déployé comme **Web
+Service** : APScheduler tourne en arrière-plan (`BackgroundScheduler`) pendant
+qu'un serveur HTTP minimal répond sur le port fourni par Render, pour satisfaire
+le contrat "Web Service".
+
 1. Connecter le dépôt GitHub à Render (https://render.com)
-2. Render détecte `render.yaml` → crée un **Background Worker** (pas un Web Service :
-   ce process ne sert aucune requête HTTP)
+2. **New +** → **Blueprint** → Render détecte `render.yaml` → propose un **Web
+   Service** nommé `globalchecks-scheduler`
 3. Renseigner les variables d'environnement dans le dashboard Render (Settings >
    Environment) : `DATABASE_URL`, `EIA_API_KEY`, `AISSTREAM_API_KEY`
 4. Chaque push sur la branche déployée redéclenche automatiquement le build
 
+**Garder le service éveillé** : Render endort un Web Service gratuit après ~15 min
+sans requête HTTP entrante — ce qui arrêterait aussi le scheduler. Configurer un
+ping externe gratuit (par ex. https://cron-job.org ou UptimeRobot) pour appeler
+l'URL du service (`https://<nom-du-service>.onrender.com/`) toutes les 10-14
+minutes.
+
 Le scheduler est résilient à un redémarrage (aucun état critique en mémoire — tout
-ce qui doit persister va dans Neon). Le tier gratuit Render peut redémarrer le
-process périodiquement ; ce n'est pas un souci pour un outil de veille (pas de
-garantie 24/7 nécessaire).
+ce qui doit persister va dans Neon). Pas de garantie 24/7 parfaite (redémarrages
+du tier gratuit, éventuel délai de réveil si le ping externe manque un cycle),
+mais suffisant pour un outil de veille, pas un système critique temps réel.
 
 Le CLI reste utilisable en local, connecté à la même base Neon que le scheduler
 déployé — les données collectées en arrière-plan sont immédiatement consultables

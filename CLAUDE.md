@@ -99,6 +99,12 @@ behavior — do not tighten either parser into raising on unexpected input.
 - `rss_client.py` fetches feeds via `requests` (explicit timeout) and hands raw bytes to
   `feedparser.parse()` — never call `feedparser.parse(url)` directly with a URL, it performs its
   own network fetch with no timeout and can hang a scheduler thread indefinitely on a slow feed.
+- `scheduler.py` uses `BackgroundScheduler` + a stdlib `http.server` health endpoint, not
+  `BlockingScheduler` alone. Render's free tier has no Background Worker product ("service type is
+  not available for this plan"), so this deploys as a Web Service instead — which means it needs
+  something bound to `$PORT` and needs an external ping (cron-job.org/UptimeRobot, see README) to
+  stop Render from sleeping it after ~15 min idle. Don't revert to a bare `BlockingScheduler` main
+  loop without re-adding the HTTP layer, or the free-tier deploy breaks again the same way.
 
 ### GDELT rate-limiting is expected and handled, not a bug to fix
 

@@ -3,20 +3,32 @@ Scheduler d'arrière-plan : exécute chaque collector à la fréquence définie 
 config.FREQUENCIES_MINUTES, en isolant les échecs (un collector qui plante n'arrête
 pas les autres) et en alertant en cas d'échecs répétés d'une même source.
 
-Point d'entrée du Background Worker Render : `python scheduler.py`.
+Point d'entrée du service Render : `python scheduler.py`.
 
-Les collectors "à la demande" (minerais USGS, trafic maritime tant que la Phase 8
-n'est pas branchée, score de risque tant que la Phase 12 n'est pas branchée) ne sont
-pas planifiés ici — voir cli.py pour un déclenchement manuel.
+DÉPLOIEMENT RENDER : le tier gratuit ne propose PAS de Background Worker (erreur
+"service type is not available for this plan" constatée en pratique — l'hypothèse
+initiale du projet était fausse sur ce point). Ce module tourne donc comme un
+**Web Service** gratuit : APScheduler s'exécute dans des threads d'arrière-plan
+(BackgroundScheduler, pas BlockingScheduler) pendant qu'un serveur HTTP minimal
+répond sur le port fourni par Render (nécessaire pour qu'un Web Service soit
+considéré "vivant"). Conséquence : Render endort le service après ~15 min sans
+requête HTTP entrante, ce qui arrêterait aussi le scheduler — un ping externe
+gratuit (cron-job.org, UptimeRobot...) doit appeler l'URL du service toutes les
+10-14 minutes pour le maintenir éveillé. Voir README, section déploiement.
+
+Les collectors "à la demande" (minerais USGS) ne sont pas planifiés ici — voir
+cli.py pour un déclenchement manuel.
 """
 
+import http.server
 import logging
+import os
 import signal
 import sys
 from datetime import datetime, timezone
 
 from apscheduler.executors.pool import ThreadPoolExecutor
-from apscheduler.schedulers.blocking import BlockingScheduler
+from apscheduler.schedulers.background import BackgroundScheduler
 
 import config
 from collectors import (
@@ -93,7 +105,7 @@ def _run_job(job_id: str, run_func) -> None:
             )
 
 
-def build_scheduler() -> BlockingScheduler:
+def build_scheduler() -> BackgroundScheduler:
     # Pool de threads dimensionné au-delà du nombre de jobs : par défaut APScheduler
     # n'en alloue que 10, ce qui suffit à faire "manquer" (misfire) le démarrage
     # immédiat d'un job si plus de 10 se déclenchent au même instant (ex. tous les
@@ -104,7 +116,7 @@ def build_scheduler() -> BlockingScheduler:
     # doit quand même s'exécuter plutôt que d'être sauté silencieusement.
     job_defaults = {"misfire_grace_time": 3600}
 
-    scheduler = BlockingScheduler(timezone="UTC", executors=executors, job_defaults=job_defaults)
+    scheduler = BackgroundScheduler(timezone="UTC", executors=executors, job_defaults=job_defaults)
     for job_id, frequency_minutes, run_func in JOBS:
         scheduler.add_job(
             _run_job,
@@ -125,16 +137,37 @@ def _handle_sigterm(signum, frame) -> None:
     sys.exit(0)
 
 
+class _HealthHandler(http.server.BaseHTTPRequestHandler):
+    """Répond OK à toute requête — sert uniquement à satisfaire Render (Web Service)
+    et le ping externe qui maintient le service éveillé (voir docstring du module)."""
+
+    def do_GET(self) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(b"OK - scheduler actif")
+
+    def log_message(self, format, *args) -> None:
+        pass  # évite de polluer scheduler.log avec chaque requête de ping
+
+
 def main() -> None:
     _configure_logging()
     signal.signal(signal.SIGTERM, _handle_sigterm)
 
     logger.info("démarrage du scheduler (%d job(s) planifié(s))", len(JOBS))
     scheduler = build_scheduler()
+    scheduler.start()
+
+    port = int(os.environ.get("PORT", 10000))
+    server = http.server.HTTPServer(("0.0.0.0", port), _HealthHandler)
+    logger.info("serveur de health-check démarré sur le port %d (requis par Render Web Service)", port)
     try:
-        scheduler.start()
+        server.serve_forever()
     except (KeyboardInterrupt, SystemExit):
         logger.info("arrêt du scheduler")
+    finally:
+        scheduler.shutdown(wait=False)
 
 
 if __name__ == "__main__":

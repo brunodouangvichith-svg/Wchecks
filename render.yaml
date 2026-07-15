@@ -1,12 +1,21 @@
 # Infrastructure as Code pour Render (https://render.com).
-# Déploie le scheduler en Background Worker (PAS un Web Service : ce process ne sert
-# aucune requête HTTP, il exécute une boucle continue via APScheduler).
+#
+# Déployé en Web Service (pas Background Worker : le tier gratuit de Render ne
+# propose PAS de Background Worker — "service type is not available for this
+# plan" constaté en pratique, contrairement à l'hypothèse initiale du projet).
+# scheduler.py fait tourner APScheduler en arrière-plan et sert un endpoint HTTP
+# minimal pour satisfaire le contrat "Web Service" de Render.
+#
+# IMPORTANT : Render endort un Web Service gratuit après ~15 min sans requête
+# HTTP entrante, ce qui arrêterait aussi le scheduler. Un ping externe gratuit
+# (cron-job.org, UptimeRobot...) doit appeler l'URL du service toutes les
+# 10-14 minutes pour le maintenir éveillé — voir README.
 #
 # Les valeurs des variables d'environnement ne sont volontairement PAS définies ici :
 # à renseigner dans le dashboard Render (Settings > Environment), jamais commitées.
 
 services:
-  - type: worker
+  - type: web
     name: globalchecks-scheduler
     runtime: python
     plan: free

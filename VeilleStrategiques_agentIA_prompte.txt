@@ -278,5 +278,10 @@ l'implémentation phase par phase.
 ```
 
 ==================================================
+Firebase 
+Project : WorldChecks
 
+======================================================
+
+Modifie `fetch_dbnomics_data.py` pour ajouter les données de production industrielle du Japon et de la zone Euro globale (recherche les codes correspondants dans le dataset OECD/MEI sur DBnomics si nécessaire). Assure-toi que ces nouvelles séries apparaissent proprement sur le graphique généré et dans l'export CSV. Lance ensuite le script pour vérifier que l'ajout fonctionne sans erreur.
 
