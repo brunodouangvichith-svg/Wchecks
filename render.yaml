@@ -1,0 +1,21 @@
+# Infrastructure as Code pour Render (https://render.com).
+# Déploie le scheduler en Background Worker (PAS un Web Service : ce process ne sert
+# aucune requête HTTP, il exécute une boucle continue via APScheduler).
+#
+# Les valeurs des variables d'environnement ne sont volontairement PAS définies ici :
+# à renseigner dans le dashboard Render (Settings > Environment), jamais commitées.
+
+services:
+  - type: worker
+    name: globalchecks-scheduler
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python scheduler.py
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: EIA_API_KEY
+        sync: false
+      - key: AISSTREAM_API_KEY
+        sync: false

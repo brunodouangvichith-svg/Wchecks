@@ -1,0 +1,11 @@
+requests
+python-dotenv
+pandas
+rich
+folium
+websockets
+feedparser
+psycopg[binary]
+apscheduler
+openpyxl
+pdfplumber

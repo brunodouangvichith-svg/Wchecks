@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+logs/*.log
+carte_mondiale.html
+.DS_Store
+
+worldchecks-c8a93-firebase-adminsdk-fbsvc-030f83283b.json
+firebase-service-account.json
+*firebase-adminsdk*.json

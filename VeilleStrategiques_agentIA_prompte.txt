@@ -1,0 +1,282 @@
+# Prompt de kickoff — Agent IA de veille énergétique et géopolitique mondiale
+
+Copiez-collez l'intégralité du bloc ci-dessous dans Claude Code pour démarrer le projet.
+
+---
+
+```
+Je veux construire un agent Python de veille énergétique et géopolitique 
+mondiale, combinant plusieurs sources de données via API/flux GRATUITS 
+uniquement, avec stockage Supabase, mise à jour automatique en arrière-
+plan, et déploiement sur Render. Le projet est volontairement large : 
+NE COMMENCE PAS À CODER TOUT DE SUITE.
+
+Je veux d'abord que tu me proposes un plan de développement découpé en 
+phases claires, avec une estimation de complexité par phase, avant toute 
+implémentation.
+
+=== VISION GLOBALE DU PROJET ===
+
+Un agent qui surveille 11 dimensions liées au risque énergétique et 
+géopolitique mondial, stockées dans Supabase, mises à jour automatiquement 
+en arrière-plan sur Render, et visualisées sur une carte mondiale interactive.
+
+1. RÉSERVE STRATÉGIQUE DE PÉTROLE US (SPR)
+   - Source : API EIA (clé gratuite, https://www.eia.gov/opendata/register.php)
+   - Série : WCSSTUS1, endpoint /petroleum/stoc/wstk/data/ (hebdomadaire)
+
+2. PRIX DU BRENT CRUDE (spot)
+   - Source : API EIA (même clé)
+   - Série : RBRTE, endpoint /petroleum/pri/spt/data/ (quotidien)
+
+3. PRODUCTION MONDIALE DE PÉTROLE ET GAZ NATUREL PAR RÉGION/PAYS
+   - Source : API EIA, catégorie "international", endpoint /international/data/
+   - Codes (activityId, productId, countryRegionId) à découvrir 
+     dynamiquement via les facets de l'API avant d'écrire les requêtes 
+     finales — pour le pétrole ET pour le gaz naturel (même endpoint, 
+     mêmes découvertes de facets, productId différent)
+   - Réutiliser un seul module client (eia_client.py) pour les deux 
+     matières premières
+
+4. CONFLITS GÉOLOCALISÉS PAR RÉGION
+   - Source : API GDELT v2 (gratuite, sans clé)
+   - Mots-clés : "oil", "pipeline", "OPEC", "sanctions", "war", "attack 
+     on infrastructure"
+   - Focus zones : Moyen-Orient, Russie/Mer Noire, Venezuela, Nigeria, 
+     Mer Rouge
+   - Récupère : date, titre, pays, lat/lon, ton, URL
+
+5. DETTE PUBLIQUE DES PAYS (% du PIB)
+   - Source : API World Bank (gratuite, sans clé), indicateur GC.DOD.TOTL.GD.ZS
+   - Classification couleur : rouge >100% PIB, orange 50-100%, vert <50%
+
+6. SITUATION ÉCONOMIQUE ET SOCIALE
+   - Source : API World Bank — impôts (GC.TAX.TOTL.GD.ZS), chômage 
+     (SL.UEM.TOTL.ZS), inflation (FP.CPI.TOTL.ZG)
+   - Tensions sociales/manifestations : GDELT, mots-clés élargis 
+     ("protest", "strike", "riot", "social unrest", "manifestation", 
+     "grève générale"), géolocalisées par pays
+
+7. BUDGET DÉFENSE ET ACTIVITÉ MILITAIRE
+   - Budget défense (% PIB) : World Bank, MS.MIL.XPND.GD.ZS
+   - Transferts d'armes : SIPRI Arms Transfers Database (CSV/Excel 
+     gratuit à parser, pas d'API REST)
+   - Proxy activité militaire : GDELT ("drone strike", "missile test", 
+     "hypersonic missile", "military drill")
+   ⚠️ LIMITE : aucune source fiable ne donne les stocks précis de 
+   missiles/drones — proxies indirects uniquement, clairement identifiés
+
+8. TRAFIC MARITIME MONDIAL (TANKERS)
+   - Source : API AISstream.io (gratuite, clé requise)
+   - Protocole WebSocket, mode "snapshot" (capture 30-60s)
+   - Zones stratégiques : Ormuz, Malacca, Suez/Mer Rouge, Bab-el-Mandeb, 
+     Golfe du Mexique
+   - Filtre ship_type AIS 80-89 (tankers)
+   - Récupère : MMSI, nom navire, lat/lon, cap, vitesse, horodatage
+   ⚠️ LIMITES : pas de cargaison précise ; "going dark" possible en zone 
+   de conflit
+
+9. DÉCLARATIONS OFFICIELLES DES CHANCELLERIES/INSTITUTIONS
+   - Source : agrégation de flux RSS officiels gratuits (ONU, Département 
+     d'État US, Maison Blanche, Commission Européenne, OTAN, MAE français, 
+     Kremlin en anglais — liste extensible)
+   - Filtrage par mots-clés (sanctions, oil, energy, military, OPEC, 
+     pipeline, strait, pays surveillés)
+   - Complémentaire de GDELT (texte officiel brut vs couverture médiatique)
+   ⚠️ LIMITE : couverture inégale, flux RSS individuellement fragiles
+
+10. PRODUCTION INDUSTRIELLE PAR PAYS
+    - Source : API World Bank (gratuite, sans clé), indicateur NV.IND.TOTL.ZS 
+      (valeur ajoutée industrie, % du PIB, annuel)
+    - Réutilise le module worldbank_client.py existant
+    ⚠️ PRIX DE L'ÉNERGIE PAR PAYS — NON INTÉGRÉ :
+    Aucune API gratuite fiable et à jour ne couvre les prix énergie 
+    consommateur par pays (World Bank : indicateur discontinué ; IEA : 
+    API complète payante, hors scope). Ne pas construire de proxy 
+    approximatif donnant une fausse impression de précision. Documenter 
+    explicitement cette absence dans le README (section "Limites connues").
+
+11. PRODUCTION DE MINERAIS ET MÉTAUX STRATÉGIQUES PAR PAYS
+    - Source : USGS National Minerals Information Center (gratuit, 
+      PAS d'API REST — rapports annuels "Mineral Commodity Summaries" 
+      en PDF/Excel à télécharger et parser)
+      https://www.usgs.gov/centers/national-minerals-information-center
+    - Matières premières prioritaires (configurables) : cuivre, lithium, 
+      uranium, terres rares, or, cobalt
+    - Données annuelles uniquement (rythme de publication USGS), pas de 
+      mise à jour fréquente possible ni pertinente
+    - Module dédié (minerals_client.py) sur le même principe que SIPRI 
+      (dimension 7) : parsing de fichiers statiques stockés localement 
+      (data/usgs/), pas de requête API
+    ⚠️ LIMITE : format des rapports USGS pouvant varier d'une année à 
+    l'autre — prévoir une tolérance dans le parsing, logger les lignes 
+    non reconnues plutôt que planter
+
+=== STOCKAGE : SUPABASE ===
+
+Toutes les dimensions sont stockées dans Supabase (PostgreSQL managé, 
+tier gratuit), mis en place dès la phase 1 comme fondation du projet.
+
+- Projet Supabase gratuit (https://supabase.com) : 500 MB, pause après 
+  7 jours d'inactivité (limite à documenter)
+- SDK officiel `supabase-py`
+- Variables d'environnement : SUPABASE_URL, SUPABASE_KEY
+
+SCHÉMA DE BASE DE DONNÉES (une table par dimension) :
+- spr_stocks (date, valeur_milliers_barils)
+- brent_prices (date, prix_usd_baril)
+- oil_production (pays_code, periode, valeur_barils_jour)
+- gas_production (pays_code, periode, valeur_production_gaz)
+- energy_conflicts (event_id unique, date, pays, lat, lon, titre, ton, url)
+- social_tensions (event_id unique, date, pays, lat, lon, titre, ton, url)
+- military_activity (event_id unique, date, pays, lat, lon, titre, ton, url)
+- country_debt (pays_code, annee, dette_pct_pib)
+- country_economy (pays_code, annee, impots_pct_pib, chomage_pct, inflation_pct)
+- defense_budget (pays_code, annee, budget_pct_pib)
+- arms_transfers (pays_exportateur, pays_importateur, annee, type_arme, quantite)
+- maritime_traffic (mmsi, timestamp, lat, lon, vitesse, cap, zone_strategique)
+- official_statements (url unique, date, institution, titre, extrait, langue)
+- country_industry (pays_code, annee, production_industrielle_pct_pib)
+- minerals_production (pays_code, annee, matiere_premiere, volume_tonnes, rang_mondial)
+- risk_scores (pays_code, date_calcul, score_global, details_json)
+
+Chaque table a une contrainte UNIQUE appropriée pour gérer l'anti-doublons 
+via upsert (event_id, url, ou combinaison pays+date/matière selon la table).
+
+MODULE CLIENT SUPABASE (supabase_client.py) :
+- Fonctions génériques de connexion et d'upsert réutilisables par tous 
+  les modules de collecte
+- Fonctions de lecture pour le CLI (--latest, --history N)
+
+=== MISE À JOUR AUTOMATIQUE EN ARRIÈRE-PLAN ===
+
+- Scheduler (scheduler.py) via APScheduler, process persistant
+- Fréquences différenciées et configurables (config.py) :
+  - SPR : hebdomadaire | Brent : quotidien
+  - Production pétrole/gaz mondiale : mensuel
+  - Conflits/tensions sociales/activité militaire (GDELT) : toutes les 6h
+  - Dette/économie/budget défense/industrie (World Bank) : mensuel
+  - Trafic maritime (AISstream) : snapshot 4x/jour
+  - Déclarations officielles (RSS) : toutes les 1-2h
+  - Minerais stratégiques (USGS) : annuel / à la demande (--minerals-refresh)
+  - Score de risque global : recalculé après chaque cycle, ou toutes les 6h
+- Logging des succès/échecs par tâche (logs/scheduler.log), sans qu'un 
+  échec bloque les autres sources
+- Alertes en cas d'échecs répétés d'une source
+
+=== DÉPLOIEMENT SUR RENDER ===
+
+Le scheduler d'arrière-plan (scheduler.py) doit être déployé sur Render 
+(https://render.com) en tant que Background Worker, pour tourner en 
+continu indépendamment de toute machine locale.
+
+- Type de service : Background Worker (tier gratuit disponible), PAS 
+  un Web Service classique — un Background Worker n'attend pas de 
+  requêtes HTTP, il exécute un process continu (adapté à APScheduler)
+- Déploiement connecté à un repo GitHub : chaque push déclenche un 
+  redéploiement automatique
+- Commande de démarrage : `python scheduler.py`
+- Variables d'environnement à configurer dans le dashboard Render (PAS 
+  commitées dans le code) : EIA_API_KEY, SUPABASE_URL, SUPABASE_KEY, 
+  AISSTREAM_API_KEY
+- Fichier render.yaml (Infrastructure as Code, optionnel mais recommandé) 
+  définissant le service Background Worker, la commande de démarrage, 
+  et la liste des variables d'environnement requises (sans leurs valeurs)
+- requirements.txt à jour avec toutes les dépendances du projet
+
+⚠️ LIMITE DU TIER GRATUIT RENDER : les services gratuits peuvent être 
+redémarrés périodiquement (redéploiements, maintenance) — le scheduler 
+doit être résilient à un redémarrage (aucun état critique conservé 
+uniquement en mémoire du process, tout ce qui doit persister va dans 
+Supabase). Pas de garantie 24/7 parfaite, mais suffisant pour un outil 
+de veille (pas un système critique temps réel).
+
+Le CLI reste utilisable en local pour consultation ponctuelle, connecté 
+à la même base Supabase que le scheduler déployé sur Render — les 
+données collectées en arrière-plan sont immédiatement consultables en 
+local sans redéploiement.
+
+=== VISUALISATION CARTOGRAPHIQUE (OpenStreetMap) ===
+
+- Bibliothèque : Folium (Leaflet.js), tiles="OpenStreetMap", gratuit, sans clé
+- Données lues depuis Supabase
+- Couches par points (FeatureGroup + LayerControl) :
+  - Conflits énergétiques — rouge | Tensions sociales — orange | 
+    Activité militaire — violet | Trafic tankers — icône bateau, bleu | 
+    Déclarations officielles (optionnel, positionnées sur capitale émettrice)
+- Couches choroplèthes par pays (une à la fois, sélectionnable) : dette, 
+  chômage/inflation, budget défense, production pétrolière, production 
+  gaz naturel, production industrielle, minerais stratégiques (par matière)
+  - Nécessite un GeoJSON frontières pays (Natural Earth ou équivalent 
+    libre, à citer)
+- Export : carte_mondiale.html autonome (tuiles OSM nécessitant internet 
+  à l'affichage)
+
+TABLE DE CORRESPONDANCE PAYS (country_mapping.py) :
+- Codes EIA / ISO3 World Bank / noms GDELT / codes USGS / clés GeoJSON
+- Logger les échecs de correspondance
+
+=== SCORE DE RISQUE GLOBAL ===
+
+Croise les 11 dimensions (stockées dans risk_scores) pour un score 
+synthétique par pays/région.
+
+=== CONTRAINTES TECHNIQUES GLOBALES ===
+
+- Python 3.11+
+- Sources : EIA (clé gratuite), GDELT (gratuite), World Bank (gratuite), 
+  AISstream.io (clé gratuite), flux RSS (gratuits), SIPRI et USGS 
+  (fichiers gratuits à parser) — AUCUNE API PAYANTE
+- Dépendances : requests, python-dotenv, pandas, rich, folium, 
+  websockets, feedparser, supabase, apscheduler, openpyxl (et 
+  pdfplumber si certains rapports USGS ne sont qu'en PDF)
+- Code commenté en français
+- Architecture modulaire : un client par source, pattern cohérent entre 
+  REST (EIA, GDELT, World Bank), RSS (feedparser), WebSocket (AISstream), 
+  fichiers statiques (SIPRI, USGS), Supabase comme couche de persistance 
+  unique
+- CLI via argparse : outil de consultation/déclenchement ponctuel
+- README.md complet : avertissement (veille informative uniquement, 
+  pas de conseil d'investissement/militaire/prédiction de prix), limites 
+  de chaque source (y compris l'absence de données prix énergie par pays), 
+  attribution des sources, guide Supabase, schéma de base de données, 
+  déploiement Render
+
+=== CE QUE J'ATTENDS DE TOI MAINTENANT ===
+
+NE CODE RIEN. À la place :
+
+1. Propose une architecture de fichiers/dossiers pour l'ensemble du 
+   projet (structure modulaire anticipant les 11 dimensions, Supabase, 
+   scheduler, Fly.io, et carte)
+
+2. Découpe le développement en phases logiques, en tenant compte de :
+   - Supabase comme fondation à mettre en place TÔT (phase 1)
+   - Dépendances entre modules (score de risque + carte en dernier)
+   - Complexité croissante : World Bank/GDELT/RSS (simples) → EIA 
+     pétrole+gaz (facets à découvrir) → SIPRI et USGS (parsing fichiers) 
+     → AISstream (WebSocket, le plus complexe) → scheduler → Render → carte
+   - Le déploiement Render intervient après validation locale du scheduler
+
+3. Pour chaque phase, précise :
+   - Livrable testable en fin de phase
+   - Risques/incertitudes techniques à surveiller
+   - Estimation de complexité (faible/moyenne/élevée)
+
+4. Recommande un ordre de priorité pour une v1 minimale si je devais 
+   réduire le scope
+
+5. Signale explicitement si certains éléments te semblent redondants, 
+   trop ambitieux pour une v1, ou nécessitant simplification — en 
+   particulier : le module trafic maritime (WebSocket), le module 
+   déclarations officielles (RSS multiples fragiles), le module minerais 
+   (parsing USGS peu automatisable), et la complexité ajoutée par 
+   Supabase + scheduler + Fly.io dès le départ
+
+Une fois que j'aurai validé le plan avec toi, on commencera 
+l'implémentation phase par phase.
+```
+
+==================================================
+
+
