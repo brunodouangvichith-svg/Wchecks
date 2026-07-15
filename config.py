@@ -24,6 +24,12 @@ DATA_DIR = BASE_DIR / "data"
 DATABASE_URL = os.getenv("DATABASE_URL")
 EIA_API_KEY = os.getenv("EIA_API_KEY")
 AISSTREAM_API_KEY = os.getenv("AISSTREAM_API_KEY")
+# GEMINI_API_KEY : clé Google AI Studio pour l'agent "Joe" (voir clients/joe_agent.py).
+# Contrairement au reste du projet, Joe utilise un LLM (Gemini) — PAS gratuit au-delà
+# du tier gratuit de Google AI Studio, donc volontairement borné (JOE_MAX_ARTICLES_PER_RUN)
+# plutôt qu'appliqué à tous les articles scrapés.
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+JOE_MAX_ARTICLES_PER_RUN = 15
 
 # --- Fréquences de mise à jour (en minutes) pour le scheduler ---
 FREQUENCIES_MINUTES = {
@@ -36,6 +42,7 @@ FREQUENCIES_MINUTES = {
     "worldbank_indicators": 30 * 24 * 60,  # dette, économie, défense, industrie
     "maritime_traffic": 6 * 60,  # 4x/jour
     "official_statements": 90,  # toutes les 1h30
+    "joe_analysis": 6 * 60,  # aligné sur le cycle GDELT (conflicts/social_tensions/military)
     "risk_score": 6 * 60,
     # Minerais (USGS) : pas de fréquence -> déclenchement manuel uniquement
     # (voir cli.py --minerals-refresh)

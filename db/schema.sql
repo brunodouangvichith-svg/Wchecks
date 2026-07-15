@@ -216,3 +216,21 @@ CREATE TABLE IF NOT EXISTS risk_scores (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (pays_code, date_calcul)
 );
+
+-- Analyse "Joe" (LLM Gemini) des articles sources — dimension complémentaire
+-- au classement par mots-clés (energy_conflicts/social_tensions/military_activity/
+-- official_statements), pas un remplacement. Voir clients/joe_agent.py.
+-- Volontairement borné à un sous-ensemble d'articles par cycle (coût API),
+-- donc PAS toutes les lignes des tables sources ont une analyse Joe.
+CREATE TABLE IF NOT EXISTS joe_analysis (
+    id BIGSERIAL PRIMARY KEY,
+    source_table TEXT NOT NULL,
+    url TEXT NOT NULL,
+    categorie TEXT,
+    gravite TEXT,
+    acteurs TEXT,
+    resume_ia TEXT,
+    modele TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (source_table, url)
+);

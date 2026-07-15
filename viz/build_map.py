@@ -96,14 +96,18 @@ def _add_point_layer(m: folium.Map, cur, table: str, color: str, label: str) -> 
     fg = folium.FeatureGroup(name=label, show=(table == "energy_conflicts"))
     cluster = MarkerCluster().add_to(fg)
     cur.execute(
-        f"SELECT lat, lon, titre, url, date, source_verifiee, resume FROM {table} "
-        f"WHERE lat IS NOT NULL AND lon IS NOT NULL"
+        f"SELECT s.lat, s.lon, s.titre, s.url, s.date, s.source_verifiee, s.resume, j.categorie, j.gravite "
+        f"FROM {table} s LEFT JOIN joe_analysis j ON j.source_table = %s AND j.url = s.url "
+        f"WHERE s.lat IS NOT NULL AND s.lon IS NOT NULL",
+        (table,),
     )
     rows = cur.fetchall()
-    for lat, lon, titre, url, date, verifiee, resume in rows:
+    for lat, lon, titre, url, date, verifiee, resume, categorie, gravite in rows:
         popup_html = f"<b>{html.escape(titre or '(sans titre)')}</b><br>{date or ''}"
         if resume:
             popup_html += f"<br>{html.escape(resume)}"
+        if categorie:
+            popup_html += f"<br>🤖 Joe : {html.escape(categorie)} ({html.escape(gravite or '?')})"
         if verifiee:
             popup_html += "<br>✅ source vérifiée (scraping)"
         if url:
@@ -142,16 +146,22 @@ def _add_maritime_layer(m: folium.Map, cur) -> None:
 
 def _add_statements_layer(m: folium.Map, cur) -> None:
     fg = folium.FeatureGroup(name="Déclarations officielles", show=False)
-    cur.execute("SELECT institution, titre, url, date, source_verifiee, resume FROM official_statements")
+    cur.execute(
+        "SELECT s.institution, s.titre, s.url, s.date, s.source_verifiee, s.resume, j.categorie, j.gravite "
+        "FROM official_statements s LEFT JOIN joe_analysis j "
+        "  ON j.source_table = 'official_statements' AND j.url = s.url"
+    )
     rows = cur.fetchall()
     n = 0
-    for institution, titre, url, date, verifiee, resume in rows:
+    for institution, titre, url, date, verifiee, resume, categorie, gravite in rows:
         location = INSTITUTION_LOCATIONS.get(institution)
         if location is None:
             continue
         popup_html = f"<b>{html.escape(titre or '(sans titre)')}</b><br>{date or ''}"
         if resume:
             popup_html += f"<br>{html.escape(resume)}"
+        if categorie:
+            popup_html += f"<br>🤖 Joe : {html.escape(categorie)} ({html.escape(gravite or '?')})"
         if verifiee:
             popup_html += "<br>✅ source vérifiée (scraping)"
         if url:

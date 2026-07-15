@@ -41,6 +41,7 @@ from collectors import (
     collect_defense_budget,
     collect_economy,
     collect_industry,
+    collect_joe_analysis,
     collect_maritime_traffic,
     collect_military_activity,
     collect_official_statements,
@@ -71,6 +72,7 @@ JOBS = [
     ("maritime_traffic", config.FREQUENCIES_MINUTES["maritime_traffic"], collect_maritime_traffic.run),
     ("credit_ratings", config.FREQUENCIES_MINUTES["worldbank_indicators"], collect_credit_ratings.run),
     ("risk_score", config.FREQUENCIES_MINUTES["risk_score"], risk_score.run),
+    ("joe_analysis", config.FREQUENCIES_MINUTES["joe_analysis"], collect_joe_analysis.run),
 ]
 
 _consecutive_failures: dict[str, int] = {}

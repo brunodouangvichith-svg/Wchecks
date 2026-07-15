@@ -11,3 +11,4 @@ openpyxl
 pdfplumber
 lxml
 beautifulsoup4
+google-genai

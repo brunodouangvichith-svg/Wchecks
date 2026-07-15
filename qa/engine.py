@@ -146,13 +146,15 @@ def _handle_conflicts_list(cur, iso3: str) -> str | None:
         ("military_activity", "activité militaire"),
     ]:
         cur.execute(
-            f"SELECT date, titre, url, source_verifiee, resume FROM {table} "
-            f"WHERE pays=%s AND titre IS NOT NULL ORDER BY date DESC LIMIT 5",
-            (iso3,),
+            f"SELECT s.date, s.titre, s.url, s.source_verifiee, s.resume, j.categorie, j.gravite "
+            f"FROM {table} s LEFT JOIN joe_analysis j "
+            f"  ON j.source_table = %s AND j.url = s.url "
+            f"WHERE s.pays=%s AND s.titre IS NOT NULL ORDER BY s.date DESC LIMIT 5",
+            (table, iso3),
         )
         events.extend(
-            (label, date, titre, url, verifiee, resume)
-            for date, titre, url, verifiee, resume in cur.fetchall()
+            (label, date, titre, url, verifiee, resume, categorie, gravite)
+            for date, titre, url, verifiee, resume, categorie, gravite in cur.fetchall()
         )
 
     if not events:
@@ -167,10 +169,14 @@ def _handle_conflicts_list(cur, iso3: str) -> str | None:
     # resume : extrait des premières phrases de la page scrapée (voir
     # article_scraper.summarize()), affiché à la place du seul titre quand
     # disponible — plus informatif qu'un titre parfois tronqué par GDELT.
+    # categorie/gravite : analyse complémentaire de l'agent "Joe" (LLM Gemini,
+    # voir clients/joe_agent.py) — dimension optionnelle, seul un sous-ensemble
+    # borné d'articles en dispose (coût API), absente pour la plupart.
     lines = [
         f"[{label}, {date.strftime('%d/%m/%Y') if date else 'date inconnue'}"
-        f"{', source vérifiée' if verifiee else ''}] {resume or titre} ({url})"
-        for label, date, titre, url, verifiee, resume in events
+        f"{', source vérifiée' if verifiee else ''}"
+        f"{f', Joe : {categorie} ({gravite})' if categorie else ''}] {resume or titre} ({url})"
+        for label, date, titre, url, verifiee, resume, categorie, gravite in events
     ]
     return (
         "derniers événements recensés (couverture presse GDELT, pas un décompte exhaustif) :\n- "
