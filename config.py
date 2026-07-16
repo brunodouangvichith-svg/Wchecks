@@ -50,6 +50,9 @@ FREQUENCIES_MINUTES = {
     # important (jusqu'à ~150 sources) -> cadence quotidienne plutôt que le
     # cycle 6h des autres flux, pour rester raisonnable en temps d'exécution.
     "country_news": 24 * 60,
+    # national_newspapers_contents : "une fois par jour" (voir demande) -
+    # petit volume (~30 journaux), pas besoin de plus frequent.
+    "national_newspapers_contents": 24 * 60,
     "risk_score": 6 * 60,
     # Minerais (USGS) : pas de fréquence -> déclenchement manuel uniquement
     # (voir cli.py --minerals-refresh)

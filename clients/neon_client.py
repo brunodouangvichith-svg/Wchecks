@@ -52,6 +52,7 @@ TABLE_COLUMNS = {
     "country_sources": ["pays_code", "nom_source", "type_source", "url", "feed_url"],
     "country_news": ["pays_code", "source_nom", "url", "date", "titre", "resume", "source_verifiee"],
     "national_newspapers": ["name", "country", "region", "language", "website_url", "political_leaning"],
+    "national_newspapers_contents": ["name", "country", "region", "language", "website_url", "content", "theme"],
 }
 
 # Colonnes formant la contrainte UNIQUE de chaque table (voir db/schema.sql).
@@ -77,6 +78,7 @@ TABLE_CONFLICT_KEYS = {
     "country_sources": ["pays_code", "nom_source"],
     "country_news": ["url"],
     "national_newspapers": ["name", "country"],
+    "national_newspapers_contents": ["website_url"],
 }
 
 # Champ utilisé pour trier "le plus récent d'abord" dans get_latest()/get_history().
@@ -102,6 +104,7 @@ ORDER_FIELD = {
     "country_sources": "created_at",
     "country_news": "date",
     "national_newspapers": "created_at",
+    "national_newspapers_contents": "created_at",
 }
 
 _pool: ConnectionPool | None = None

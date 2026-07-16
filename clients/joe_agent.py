@@ -211,6 +211,51 @@ def translate_batch(texts: list[str | None]) -> list[str | None]:
     return results
 
 
+_HOMEPAGE_BATCH_PROMPT_TEMPLATE = """Voici des extraits de la page d'accueil de plusieurs journaux, numérotés. Pour CHACUN, donne :
+- un court résumé (2-3 phrases, en français) de l'actualité mise en avant sur cette page ;
+- un thème principal (quelques mots, libre, ex. "politique intérieure", "conflit international", "économie").
+
+{numbered}
+
+Réponds UNIQUEMENT avec un objet JSON associant chaque numéro (en chaîne) à un objet {{"content": "...", "theme": "..."}}, sans commentaire ni texte autour."""
+
+
+def analyze_homepages_batch(texts: list[str | None]) -> list[dict | None]:
+    """
+    Analyse plusieurs pages d'accueil de journaux (voir
+    collectors/collect_national_newspapers_contents.py) en appels Gemini
+    groupés — même rationnel que translate_batch() : le tier gratuit plafonne
+    à 15 requêtes/minute, un appel par journal serait inutilement lent pour
+    ~30 journaux traités une fois par jour.
+
+    Retourne une liste de MÊME LONGUEUR que `texts` (alignée par position) :
+    {"content", "theme"} pour chaque texte non vide analysé avec succès, ou
+    None si ce texte était vide, la clé API est absente, ou le lot
+    correspondant a échoué.
+    """
+    results: list[dict | None] = [None] * len(texts)
+    if not config.GEMINI_API_KEY:
+        return results
+
+    indexed_non_empty = [(i, t) for i, t in enumerate(texts) if t]
+    for batch_start in range(0, len(indexed_non_empty), TRANSLATE_BATCH_SIZE):
+        batch = indexed_non_empty[batch_start : batch_start + TRANSLATE_BATCH_SIZE]
+        numbered = "\n\n".join(f"{n}: {t[:2000]}" for n, (_, t) in enumerate(batch))
+        prompt = _HOMEPAGE_BATCH_PROMPT_TEMPLATE.format(numbered=numbered)
+        try:
+            response = _generate_with_retry(prompt, response_mime_type="application/json")
+            data = json.loads(response.text)
+            for n, (original_index, _) in enumerate(batch):
+                item = data.get(str(n))
+                if item and item.get("content"):
+                    results[original_index] = {"content": item.get("content"), "theme": item.get("theme")}
+        except Exception as exc:
+            logger.info(
+                "joe_agent: échec d'analyse de pages d'accueil (lot de %d) (%s)", len(batch), exc
+            )
+    return results
+
+
 def discover_country_sources(country_name: str) -> list[dict] | None:
     """
     Demande à Gemini de lister les principaux journaux nationaux et le site

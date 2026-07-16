@@ -287,3 +287,22 @@ CREATE TABLE IF NOT EXISTS national_newspapers (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (name, country)
 );
+
+-- Résumé + thème du jour de la page d'accueil de chaque journal de
+-- national_newspapers, produit par l'agent Joe (scraping + analyse groupée,
+-- voir clients/joe_agent.analyze_homepages_batch et
+-- collectors/collect_national_newspapers_contents.py). Une ligne par journal
+-- (UNIQUE website_url) : ÉCRASÉE chaque jour par la collecte planifiée, ce
+-- n'est pas un historique — reflète l'état du jour, comme credit_ratings.
+CREATE TABLE IF NOT EXISTS national_newspapers_contents (
+    id BIGSERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    country TEXT NOT NULL,
+    region TEXT NOT NULL,
+    language TEXT NOT NULL,
+    website_url TEXT NOT NULL,
+    content TEXT,
+    theme TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (website_url)
+);

@@ -47,6 +47,7 @@ from collectors import (
     collect_joe_analysis,
     collect_maritime_traffic,
     collect_military_activity,
+    collect_national_newspapers_contents,
     collect_official_statements,
     collect_oil_gas_production,
     collect_social_tensions,
@@ -79,6 +80,11 @@ JOBS = [
     ("joe_analysis", config.FREQUENCIES_MINUTES["joe_analysis"], collect_joe_analysis.run),
     ("country_sources", config.FREQUENCIES_MINUTES["country_sources"], collect_country_sources.run),
     ("country_news", config.FREQUENCIES_MINUTES["country_news"], collect_country_news.run),
+    (
+        "national_newspapers_contents",
+        config.FREQUENCIES_MINUTES["national_newspapers_contents"],
+        collect_national_newspapers_contents.run,
+    ),
 ]
 
 # Jobs planifiés à heures fixes (vraie expression cron) plutôt qu'à intervalle
