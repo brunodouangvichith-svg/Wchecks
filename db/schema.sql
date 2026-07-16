@@ -361,3 +361,21 @@ CREATE TABLE IF NOT EXISTS agences_presses (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (name)
 );
+
+-- Résumé + thème de la page d'accueil de chaque agence de agences_presses —
+-- même structure que national_newspapers_contents/international_organizations_contents
+-- (une ligne par agence, UNIQUE website_url, écrasée à chaque rafraîchissement
+-- plutôt qu'un historique).
+CREATE TABLE IF NOT EXISTS agences_presses_contents (
+    id BIGSERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL,
+    country TEXT NOT NULL,
+    specialty TEXT,
+    website_url TEXT NOT NULL,
+    region TEXT,
+    content TEXT,
+    theme TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (website_url)
+);
