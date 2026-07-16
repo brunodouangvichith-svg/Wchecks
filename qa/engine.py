@@ -28,13 +28,26 @@ _JOE_SOURCE_TABLES = [
     ("country_news", "pays_code"),
 ]
 
+# Tables de référence (annuaire + contenu, voir scripts/populate_*.py et
+# collectors/collect_*_contents.py) : contrairement à _JOE_SOURCE_TABLES, elles
+# ont déjà leur propre colonne contenu/thème (pas de jointure vers
+# joe_analysis) — une ligne par entité, écrasée à chaque rafraîchissement
+# quotidien plutôt qu'un flux d'événements. (table, colonne "pays"/région).
+_JOE_REFERENCE_TABLES = [
+    ("national_newspapers_contents", "country"),
+    ("international_organizations_contents", "region"),
+]
+
 
 def get_joe_articles(limit: int = 50, search: str | None = None) -> list[dict]:
     """
     Retourne les articles ayant une analyse Joe (clients/joe_agent.py), du plus
     récent au plus ancien — alimente le panneau dédié de la carte
-    (viz/build_map.py) : date/heure, pays (ou institution), nom de domaine de
-    la source, catégorie/gravité et résumé Joe.
+    (viz/build_map.py) : date/heure, pays (ou institution/région), nom de
+    domaine de la source, catégorie/gravité et résumé Joe. Combine les
+    événements analysés au fil de l'eau (_JOE_SOURCE_TABLES) et les fiches de
+    référence rafraîchies quotidiennement (_JOE_REFERENCE_TABLES : journaux
+    nationaux, organisations internationales).
 
     `search`, si fourni, filtre sur une correspondance partielle (insensible à
     la casse) dans le thème, le résumé, les acteurs ou le pays — recherche sur
@@ -44,12 +57,17 @@ def get_joe_articles(limit: int = 50, search: str | None = None) -> list[dict]:
     Ne couvre qu'un sous-ensemble des articles collectés : Joe est
     volontairement borné par cycle (coût API, voir config.JOE_MAX_ARTICLES_PER_RUN).
     """
-    selects = [
+    event_selects = [
         f"SELECT s.date, s.{pays_col} AS pays, s.url, j.categorie, j.gravite, j.resume_ia, j.acteurs "
         f"FROM {table} s JOIN joe_analysis j ON j.source_table = '{table}' AND j.url = s.url"
         for table, pays_col in _JOE_SOURCE_TABLES
     ]
-    base_query = " UNION ALL ".join(selects)
+    reference_selects = [
+        f"SELECT created_at AS date, {pays_col} AS pays, website_url AS url, theme AS categorie, "
+        f"NULL AS gravite, content AS resume_ia, NULL AS acteurs FROM {table} WHERE content IS NOT NULL"
+        for table, pays_col in _JOE_REFERENCE_TABLES
+    ]
+    base_query = " UNION ALL ".join(event_selects + reference_selects)
 
     params: list = []
     where_clause = ""
