@@ -194,6 +194,14 @@ def _add_choropleth(
         nan_fill_color="white",
         show=False,
     ).add_to(m)
+    # folium ajoute la bannière de légende (échelle de couleurs) comme un
+    # enfant du Choropleth indépendant du LayerControl (self.add_child(self.color_scale)
+    # dans folium/features.py) — elle resterait donc affichée en permanence sur
+    # l'écran principal, peu importe la couche sélectionnée dans le menu
+    # OpenStreetMap. On la retire ici : la couche reste sélectionnable dans le
+    # menu, seule la bannière visuelle sur la carte est supprimée.
+    if choropleth.color_scale is not None:
+        choropleth._children.pop(choropleth.color_scale.get_name(), None)
     folium.GeoJsonTooltip(
         fields=["name"] + [f"tt_{col}" for col, _ in tooltip_cols],
         aliases=["Pays :"] + [f"{label} :" for _, label in tooltip_cols],
@@ -401,7 +409,7 @@ class _JoeWidget(MacroElement):
             container.style.background = 'white';
             container.style.borderRadius = '10px';
             container.style.boxShadow = '0 2px 10px rgba(0,0,0,0.35)';
-            container.style.width = 'min(416px, calc(100vw - 24px))';
+            container.style.width = 'min(500px, calc(100vw - 24px))';
             container.style.maxWidth = 'calc(100vw - 24px)';
             container.style.boxSizing = 'border-box';
             container.style.fontFamily = 'sans-serif';
