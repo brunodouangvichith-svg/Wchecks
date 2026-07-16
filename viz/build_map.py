@@ -434,15 +434,11 @@ Positionné en bas, centré horizontalement sur la carte. Deux pièges déjà
 
 class _JoeWidget(MacroElement):
     """
-    Panneau flottant à gauche de la carte, menu déroulant listant les articles
-    analysés par l'agent Joe (clients/joe_agent.py) : date/heure, pays, nom de
-    domaine de la source, résumé — via l'endpoint /joe-articles de scheduler.py
-    (voir qa/engine.get_joe_articles).
-
-    Replié par défaut (juste un bouton d'en-tête) : la liste n'est chargée
-    qu'au premier dépliage plutôt qu'au chargement de la page, pour éviter une
-    requête réseau inutile si l'utilisateur ne l'ouvre jamais (et éviter de
-    réveiller le service Render endormi juste pour ça).
+    Panneau flottant à gauche de la carte, toujours ouvert (pas de repli),
+    listant les articles analysés par l'agent Joe (clients/joe_agent.py) :
+    date/heure, pays, nom de domaine de la source, thème, résumé — via
+    l'endpoint /joe-articles de scheduler.py (voir qa/engine.get_joe_articles).
+    Chargé au rendu de la carte.
     """
 
     _template = Template(
@@ -466,20 +462,16 @@ class _JoeWidget(MacroElement):
             container.style.color = '#222';
             container.style.overflow = 'hidden';
             container.innerHTML =
-                '<button id="joe-toggle-btn" style="width:100%; text-align:left; cursor:pointer; ' +
-                'padding:10px 12px; min-height:36px; font-size:14px; font-weight:bold; border:none; ' +
-                'background:white; border-radius:10px;">🤖 Articles analysés par Joe ▾</button>' +
-                '<div id="joe-panel" style="display:none; max-height:60vh; overflow-y:auto; padding:0 12px 12px;">' +
+                '<div style="padding:10px 12px; min-height:36px; font-size:14px; font-weight:bold;">' +
+                '🤖 Articles analysés par Joe</div>' +
+                '<div id="joe-panel" style="max-height:60vh; overflow-y:auto; padding:0 12px 12px;">' +
                 '<div id="joe-list">Chargement…</div>' +
                 '</div>';
             L.DomEvent.disableClickPropagation(container);
             L.DomEvent.disableScrollPropagation(container);
 
             const BACKEND_URL = "{{ this.backend_url }}";
-            const toggleBtn = document.getElementById("joe-toggle-btn");
-            const panel = document.getElementById("joe-panel");
             const list = document.getElementById("joe-list");
-            let loaded = false;
 
             function renderArticles(articles) {
                 if (!articles.length) {
@@ -506,22 +498,13 @@ class _JoeWidget(MacroElement):
                 }).join("");
             }
 
-            toggleBtn.addEventListener("click", function() {
-                const isOpen = panel.style.display !== "none";
-                panel.style.display = isOpen ? "none" : "block";
-                toggleBtn.innerHTML = "🤖 Articles analysés par Joe " + (isOpen ? "▾" : "▴");
-                if (!isOpen && !loaded) {
-                    loaded = true;
-                    fetch(BACKEND_URL + "?limit=30")
-                        .then(function(r) { return r.json(); })
-                        .then(function(data) { renderArticles(data.articles || []); })
-                        .catch(function() {
-                            list.textContent = "Service indisponible (le service Render peut mettre "
-                                + "30-60s à se réveiller s'il était endormi — réessayez).";
-                            loaded = false;
-                        });
-                }
-            });
+            fetch(BACKEND_URL + "?limit=30")
+                .then(function(r) { return r.json(); })
+                .then(function(data) { renderArticles(data.articles || []); })
+                .catch(function() {
+                    list.textContent = "Service indisponible (le service Render peut mettre "
+                        + "30-60s à se réveiller s'il était endormi — rechargez la page).";
+                });
         })();
         {% endmacro %}
         """
