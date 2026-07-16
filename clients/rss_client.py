@@ -15,6 +15,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from clients.article_scraper import summarize, verify_and_extract
+from clients.joe_agent import translate_batch
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,18 @@ def fetch_feed_entries(feed_url: str) -> list[dict]:
                 "resume": summarize(article_text),
             }
         )
+
+    # Traduction groupée en anglais (voir joe_agent.translate_batch) — les
+    # journaux nationaux découverts par Joe (collect_country_sources.py)
+    # publient dans leur langue locale, pas nécessairement l'anglais. Un appel
+    # groupé plutôt qu'un appel par article : le tier gratuit de Gemini
+    # plafonne à 15 requêtes/minute, impraticable pour un flux de centaines
+    # d'entrées.
+    translations = translate_batch([row["resume"] for row in rows])
+    for row, translated in zip(rows, translations):
+        if translated:
+            row["resume"] = translated
+
     return rows
 
 

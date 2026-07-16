@@ -257,6 +257,11 @@ class _JoeWidget(MacroElement):
     date/heure, pays, nom de domaine de la source, thème, résumé — via
     l'endpoint /joe-articles de scheduler.py (voir qa/engine.get_joe_articles).
     Chargé au rendu de la carte.
+
+    Inclut un champ de recherche (sous le titre) qui interroge le même
+    endpoint avec `?q=...` (voir qa/engine.get_joe_articles(search=...)) —
+    recherche sur TOUS les articles analysés en base (thème, résumé, acteurs,
+    pays), pas seulement les 30 plus récents chargés par défaut.
     """
 
     _template = Template(
@@ -280,8 +285,12 @@ class _JoeWidget(MacroElement):
             container.style.color = '#222';
             container.style.overflow = 'hidden';
             container.innerHTML =
-                '<div style="padding:10px 12px; min-height:36px; font-size:14px; font-weight:bold;">' +
+                '<div style="padding:10px 12px 6px; min-height:36px; font-size:14px; font-weight:bold;">' +
                 '🤖 Articles analysés par Joe</div>' +
+                '<div style="padding:0 12px 8px;">' +
+                '<input id="joe-search" type="text" placeholder="Rechercher (thème, pays, mot-clé...)" ' +
+                'style="width:100%; padding:6px; font-size:16px; box-sizing:border-box;">' +
+                '</div>' +
                 '<div id="joe-panel" style="max-height:60vh; overflow-y:auto; padding:0 12px 12px;">' +
                 '<div id="joe-list">Chargement…</div>' +
                 '</div>';
@@ -290,10 +299,11 @@ class _JoeWidget(MacroElement):
 
             const BACKEND_URL = "{{ this.backend_url }}";
             const list = document.getElementById("joe-list");
+            const searchInput = document.getElementById("joe-search");
 
             function renderArticles(articles) {
                 if (!articles.length) {
-                    list.textContent = "Aucun article analysé par Joe pour le moment.";
+                    list.textContent = "Aucun article trouvé.";
                     return;
                 }
                 list.innerHTML = articles.map(function(a) {
@@ -316,13 +326,30 @@ class _JoeWidget(MacroElement):
                 }).join("");
             }
 
-            fetch(BACKEND_URL + "?limit=30")
-                .then(function(r) { return r.json(); })
-                .then(function(data) { renderArticles(data.articles || []); })
-                .catch(function() {
-                    list.textContent = "Service indisponible (le service Render peut mettre "
-                        + "30-60s à se réveiller s'il était endormi — rechargez la page).";
-                });
+            function loadArticles(searchTerm) {
+                list.textContent = "Chargement…";
+                var url = BACKEND_URL + "?limit=30";
+                if (searchTerm) url += "&q=" + encodeURIComponent(searchTerm);
+                fetch(url)
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) { renderArticles(data.articles || []); })
+                    .catch(function() {
+                        list.textContent = "Service indisponible (le service Render peut mettre "
+                            + "30-60s à se réveiller s'il était endormi — réessayez).";
+                    });
+            }
+
+            // debounce : évite un appel réseau à chaque frappe, attend une pause
+            // de 400ms dans la saisie avant de lancer la recherche.
+            let debounceTimer = null;
+            searchInput.addEventListener("input", function() {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(function() {
+                    loadArticles(searchInput.value.trim());
+                }, 400);
+            });
+
+            loadArticles(null);
         })();
         {% endmacro %}
         """

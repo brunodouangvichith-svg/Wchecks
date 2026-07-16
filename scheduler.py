@@ -31,6 +31,7 @@ from urllib.parse import parse_qs, urlparse
 
 from apscheduler.executors.pool import ThreadPoolExecutor
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 import config
 from collectors import (
@@ -74,10 +75,19 @@ JOBS = [
     ("maritime_traffic", config.FREQUENCIES_MINUTES["maritime_traffic"], collect_maritime_traffic.run),
     ("credit_ratings", config.FREQUENCIES_MINUTES["worldbank_indicators"], collect_credit_ratings.run),
     ("risk_score", config.FREQUENCIES_MINUTES["risk_score"], risk_score.run),
+    # frequency_minutes ignoré pour ce job : planifié via CRON_JOBS ci-dessous (2x/jour à heures fixes).
     ("joe_analysis", config.FREQUENCIES_MINUTES["joe_analysis"], collect_joe_analysis.run),
     ("country_sources", config.FREQUENCIES_MINUTES["country_sources"], collect_country_sources.run),
     ("country_news", config.FREQUENCIES_MINUTES["country_news"], collect_country_news.run),
 ]
+
+# Jobs planifiés à heures fixes (vraie expression cron) plutôt qu'à intervalle
+# glissant depuis le dernier redémarrage — utile pour un job qu'on veut voir
+# tourner à des heures prévisibles (ex. Joe, 2x/jour à 06h00 et 18h00 UTC),
+# plutôt qu'"toutes les 12h depuis que le service a redémarré".
+CRON_JOBS = {
+    "joe_analysis": "0 6,18 * * *",
+}
 
 _consecutive_failures: dict[str, int] = {}
 
@@ -128,6 +138,20 @@ def build_scheduler() -> BackgroundScheduler:
 
     scheduler = BackgroundScheduler(timezone="UTC", executors=executors, job_defaults=job_defaults)
     for job_id, frequency_minutes, run_func in JOBS:
+        if job_id in CRON_JOBS:
+            trigger = CronTrigger.from_crontab(CRON_JOBS[job_id], timezone="UTC")
+            scheduler.add_job(
+                _run_job,
+                trigger,
+                args=[job_id, run_func],
+                id=job_id,
+                next_run_time=datetime.now(timezone.utc),  # exécution immédiate au démarrage, puis suit le cron
+                max_instances=1,
+                coalesce=True,
+            )
+            logger.info("job '%s' planifié via cron '%s' (UTC)", job_id, CRON_JOBS[job_id])
+            continue
+
         scheduler.add_job(
             _run_job,
             "interval",
@@ -192,12 +216,14 @@ class _HealthHandler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _handle_joe_articles(self, parsed) -> None:
-        limit_param = parse_qs(parsed.query).get("limit", ["50"])[0]
+        query_params = parse_qs(parsed.query)
+        limit_param = query_params.get("limit", ["50"])[0]
+        search_param = query_params.get("q", [""])[0].strip() or None
         try:
             from qa.engine import get_joe_articles
 
             limit = max(1, min(int(limit_param), 200))
-            articles = get_joe_articles(limit=limit)
+            articles = get_joe_articles(limit=limit, search=search_param)
         except Exception:
             logger.exception("/joe-articles : échec")
             articles = []

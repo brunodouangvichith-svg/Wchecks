@@ -33,6 +33,7 @@ import requests
 
 import config
 from clients.article_scraper import summarize, verify_and_extract
+from clients.joe_agent import translate_batch
 from mapping.country_mapping import resolve_country
 
 logger = logging.getLogger(__name__)
@@ -154,6 +155,16 @@ def search_articles(
                 "resume": summarize(article_text),
             }
         )
+
+    # Traduction groupée en anglais (voir joe_agent.translate_batch) — les
+    # sources GDELT ne sont pas toutes anglophones malgré le filtre sourcelang
+    # ci-dessus (qui porte sur la langue du MÉDIA, pas garanti à 100%). Un
+    # appel groupé plutôt qu'un appel par article : le tier gratuit de Gemini
+    # plafonne à 15 requêtes/minute, impraticable pour ~250 articles/appel.
+    translations = translate_batch([row["resume"] for row in rows])
+    for row, translated in zip(rows, translations):
+        if translated:
+            row["resume"] = translated
 
     logger.info(
         "search_articles(%s) : %d article(s) récupéré(s), %d source(s) vérifiée(s) par scraping",
