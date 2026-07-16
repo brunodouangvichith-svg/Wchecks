@@ -268,3 +268,22 @@ CREATE TABLE IF NOT EXISTS country_news (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (url)
 );
+
+-- Annuaire de référence des grands journaux nationaux dans le monde (nom,
+-- pays, région, langue, site officiel, ligne éditoriale) — peuplé une fois via
+-- scripts/populate_national_newspapers.py, pas un collector planifié (données
+-- statiques, pas d'actualité à rafraîchir). Distinct de country_sources : celui-ci
+-- est un annuaire de référence généraliste (couverture mondiale), country_sources
+-- est spécifique au pipeline de lecture RSS de l'agent Joe (limité à
+-- config.MONITORED_COUNTRIES).
+CREATE TABLE IF NOT EXISTS national_newspapers (
+    id BIGSERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    country TEXT NOT NULL,
+    region TEXT NOT NULL,
+    language TEXT NOT NULL,
+    website_url TEXT NOT NULL,
+    political_leaning TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (name, country)
+);

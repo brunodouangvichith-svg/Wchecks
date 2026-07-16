@@ -51,6 +51,7 @@ TABLE_COLUMNS = {
     "joe_analysis": ["source_table", "url", "categorie", "gravite", "acteurs", "resume_ia", "modele"],
     "country_sources": ["pays_code", "nom_source", "type_source", "url", "feed_url"],
     "country_news": ["pays_code", "source_nom", "url", "date", "titre", "resume", "source_verifiee"],
+    "national_newspapers": ["name", "country", "region", "language", "website_url", "political_leaning"],
 }
 
 # Colonnes formant la contrainte UNIQUE de chaque table (voir db/schema.sql).
@@ -75,6 +76,7 @@ TABLE_CONFLICT_KEYS = {
     "joe_analysis": ["source_table", "url"],
     "country_sources": ["pays_code", "nom_source"],
     "country_news": ["url"],
+    "national_newspapers": ["name", "country"],
 }
 
 # Champ utilisé pour trier "le plus récent d'abord" dans get_latest()/get_history().
@@ -99,6 +101,7 @@ ORDER_FIELD = {
     "joe_analysis": "created_at",
     "country_sources": "created_at",
     "country_news": "date",
+    "national_newspapers": "created_at",
 }
 
 _pool: ConnectionPool | None = None
