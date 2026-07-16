@@ -306,3 +306,23 @@ CREATE TABLE IF NOT EXISTS national_newspapers_contents (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (website_url)
 );
+
+-- Annuaire de référence des grandes organisations internationales et
+-- institutions financières mondiales (FMI, Banque mondiale, ONU, OMC...) —
+-- peuplé une fois via scripts/populate_international_organizations.py, même
+-- philosophie que national_newspapers (données statiques, pas de collector
+-- planifié). `category` distingue les 4 grandes familles décrites (IFI,
+-- banque de développement régionale, organisation politique/judiciaire,
+-- institution régionale européenne) ; `key_resources` résume les données/
+-- rapports publics notables disponibles sur le site (WEO, WDI, Eurostat...).
+CREATE TABLE IF NOT EXISTS international_organizations (
+    id BIGSERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL,
+    role TEXT,
+    key_resources TEXT,
+    website_url TEXT NOT NULL,
+    region TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (name)
+);
