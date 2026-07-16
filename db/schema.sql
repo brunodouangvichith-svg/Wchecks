@@ -326,3 +326,21 @@ CREATE TABLE IF NOT EXISTS international_organizations (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (name)
 );
+
+-- Résumé + thème de la page d'accueil de chaque organisation de
+-- international_organizations — même structure que national_newspapers_contents
+-- (une ligne par organisation, UNIQUE website_url, écrasée à chaque
+-- rafraîchissement plutôt qu'un historique).
+CREATE TABLE IF NOT EXISTS international_organizations_contents (
+    id BIGSERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL,
+    role TEXT,
+    key_resources TEXT,
+    website_url TEXT NOT NULL,
+    region TEXT,
+    content TEXT,
+    theme TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (website_url)
+);
