@@ -275,7 +275,7 @@ Positionné en bas, centré horizontalement sur la carte. Deux pièges déjà
             container.style.fontSize = '13px';
             container.style.color = '#222';
             container.innerHTML =
-                '<div style="font-weight:bold; margin-bottom:6px;">🎙️ Poser une question sur un pays</div>' +
+                '<div style="font-weight:bold; margin-bottom:6px;">🎙️ Ask Joe</div>' +
                 '<div style="display:flex; gap:6px; margin-bottom:8px;">' +
                 // font-size 16px sur l'input : en-dessous, Safari/Chrome iOS zoome
                 // automatiquement la page au focus, ce qui casse la mise en page.

@@ -13,7 +13,7 @@ import logging
 from urllib.parse import urlparse
 
 from clients.neon_client import get_connection
-from mapping.country_mapping import COUNTRY_NAME_TO_ISO3
+from mapping.country_mapping import COUNTRY_NAME_TO_ISO3, country_from_domain
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +54,12 @@ def get_joe_articles(limit: int = 50) -> list[dict]:
     articles = []
     for date, pays, url, categorie, gravite, resume in rows:
         domain = urlparse(url).netloc.removeprefix("www.") if url else None
+        # Repli sur l'extension de domaine (voir mapping.country_mapping.TLD_TO_ISO3)
+        # quand le pays est inconnu — arrive pour les événements GDELT dont le
+        # pays a été effacé (zone stratégique détectée, voir gdelt_client.py)
+        # ou jamais résolu. N'écrase jamais une valeur déjà connue (institution
+        # pour official_statements, pays_code toujours renseigné pour country_news).
+        pays = pays or country_from_domain(domain)
         articles.append(
             {
                 "date": date.isoformat() if date else None,

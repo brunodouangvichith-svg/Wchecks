@@ -315,6 +315,37 @@ COUNTRY_CENTROIDS: dict[str, tuple[float, float]] = {
     iso3: (lat, lon) for _, (iso3, lat, lon) in _COUNTRIES.items()
 }
 
+# Extension de domaine (dernier label, ex. "uk" dans "co.uk") -> code ISO3.
+# Construit incrémentalement à partir des sources réellement découvertes
+# (collectors/collect_country_sources.py), même philosophie que _ALIASES :
+# pas une liste mondiale exhaustive, étendue au fur et à mesure des cas
+# rencontrés. La plupart des ccTLD correspondent au code ISO 3166-1 alpha-2,
+# SAUF le Royaume-Uni (".uk", pas ".gb").
+TLD_TO_ISO3: dict[str, str] = {
+    "ao": "AGO", "ae": "ARE", "au": "AUS", "az": "AZE", "br": "BRA",
+    "ca": "CAN", "cn": "CHN", "de": "DEU", "dz": "DZA", "eg": "EGY",
+    "es": "ESP", "fr": "FRA", "uk": "GBR", "gr": "GRC", "id": "IDN",
+    "in": "IND", "ir": "IRN", "iq": "IRQ", "il": "ISR", "it": "ITA",
+    "jp": "JPN", "kz": "KAZ", "kr": "KOR", "kw": "KWT", "ly": "LBY",
+    "mx": "MEX", "ng": "NGA", "no": "NOR", "pk": "PAK", "qa": "QAT",
+    "ru": "RUS", "sa": "SAU", "sy": "SYR", "tm": "TKM", "tr": "TUR",
+    "ua": "UKR", "ve": "VEN", "ye": "YEM", "za": "ZAF",
+}
+
+
+def country_from_domain(domain: str | None) -> str | None:
+    """
+    Déduit un pays (ISO3) à partir de l'extension d'un nom de domaine (ex.
+    "india.gov.in" -> IND via le suffixe ".in", "telegraph.co.uk" -> GBR via
+    ".uk") — voir TLD_TO_ISO3. Retourne None si le domaine se termine par un
+    TLD générique (.com, .net, .org...) sans signal pays, ou par un TLD pas
+    encore recensé.
+    """
+    if not domain:
+        return None
+    last_label = domain.rsplit(".", 1)[-1].lower()
+    return TLD_TO_ISO3.get(last_label)
+
 
 def resolve_country(gdelt_country_name: str) -> tuple[str | None, float | None, float | None]:
     """
