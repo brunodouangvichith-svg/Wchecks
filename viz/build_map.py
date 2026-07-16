@@ -415,7 +415,7 @@ class _JoeWidget(MacroElement):
                 '<input id="joe-search" type="text" placeholder="Rechercher (thème, pays, mot-clé...)" ' +
                 'style="width:100%; padding:6px; font-size:16px; box-sizing:border-box;">' +
                 '</div>' +
-                '<div id="joe-panel" style="max-height:60vh; overflow-y:auto; padding:0 12px 12px;">' +
+                '<div id="joe-panel" style="max-height:85vh; overflow-y:auto; padding:0 12px 12px;">' +
                 '<div id="joe-list">Chargement…</div>' +
                 '</div>';
             L.DomEvent.disableClickPropagation(container);
