@@ -10,11 +10,61 @@ réponse plausible.
 """
 
 import logging
+from urllib.parse import urlparse
 
 from clients.neon_client import get_connection
 from mapping.country_mapping import COUNTRY_NAME_TO_ISO3
 
 logger = logging.getLogger(__name__)
+
+# (table, colonne représentant le "pays" pour l'affichage) — official_statements
+# n'a pas de colonne pays, l'institution en tient lieu (ONU, Commission
+# européenne...).
+_JOE_SOURCE_TABLES = [
+    ("energy_conflicts", "pays"),
+    ("social_tensions", "pays"),
+    ("military_activity", "pays"),
+    ("official_statements", "institution"),
+]
+
+
+def get_joe_articles(limit: int = 50) -> list[dict]:
+    """
+    Retourne les articles ayant une analyse Joe (clients/joe_agent.py), du plus
+    récent au plus ancien — alimente le panneau dédié de la carte
+    (viz/build_map.py) : date/heure, pays (ou institution), nom de domaine de
+    la source, catégorie/gravité et résumé Joe.
+
+    Ne couvre qu'un sous-ensemble des articles collectés : Joe est
+    volontairement borné par cycle (coût API, voir config.JOE_MAX_ARTICLES_PER_RUN).
+    """
+    selects = [
+        f"SELECT s.date, s.{pays_col} AS pays, s.url, j.categorie, j.gravite, j.resume_ia "
+        f"FROM {table} s JOIN joe_analysis j ON j.source_table = '{table}' AND j.url = s.url"
+        for table, pays_col in _JOE_SOURCE_TABLES
+    ]
+    query = " UNION ALL ".join(selects) + " ORDER BY date DESC NULLS LAST LIMIT %s"
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, (limit,))
+            rows = cur.fetchall()
+
+    articles = []
+    for date, pays, url, categorie, gravite, resume in rows:
+        domain = urlparse(url).netloc.removeprefix("www.") if url else None
+        articles.append(
+            {
+                "date": date.isoformat() if date else None,
+                "pays": pays,
+                "source": domain,
+                "categorie": categorie,
+                "gravite": gravite,
+                "resume": resume,
+                "url": url,
+            }
+        )
+    return articles
 
 
 def _find_country(question: str) -> tuple[str, str] | None:

@@ -150,6 +150,8 @@ class _HealthHandler(http.server.BaseHTTPRequestHandler):
       maintient le service éveillé (voir docstring du module) ;
     - GET /ask?q=<question> répond en JSON à partir des données réelles de Neon
       (voir qa/engine.py), pour l'interface vocale de la carte (viz/build_map.py).
+    - GET /joe-articles?limit=N renvoie les articles analysés par l'agent Joe
+      (voir qa/engine.get_joe_articles), pour le panneau dédié de la carte.
       Accès autorisé cross-origin (Access-Control-Allow-Origin: *) : la carte est
       servie depuis GitHub Pages, un domaine différent de celui de ce service.
     """
@@ -158,6 +160,9 @@ class _HealthHandler(http.server.BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/ask":
             self._handle_ask(parsed)
+            return
+        if parsed.path == "/joe-articles":
+            self._handle_joe_articles(parsed)
             return
 
         self.send_response(200)
@@ -176,6 +181,24 @@ class _HealthHandler(http.server.BaseHTTPRequestHandler):
             answer = "Erreur interne en traitant la question."
 
         body = json.dumps({"question": question, "answer": answer}).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _handle_joe_articles(self, parsed) -> None:
+        limit_param = parse_qs(parsed.query).get("limit", ["50"])[0]
+        try:
+            from qa.engine import get_joe_articles
+
+            limit = max(1, min(int(limit_param), 200))
+            articles = get_joe_articles(limit=limit)
+        except Exception:
+            logger.exception("/joe-articles : échec")
+            articles = []
+
+        body = json.dumps({"articles": articles}).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Access-Control-Allow-Origin", "*")

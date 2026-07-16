@@ -40,6 +40,10 @@ OUTPUT_PATH = config.BASE_DIR / "carte_mondiale.html"
 # question/réponse doit passer par ce service distant — voir qa/engine.py.
 QA_BACKEND_URL = "https://globalchecks-scheduler.onrender.com/ask"
 
+# Backend du panneau "articles analysés par Joe" (endpoint /joe-articles de
+# scheduler.py, voir qa/engine.get_joe_articles).
+JOE_BACKEND_URL = "https://globalchecks-scheduler.onrender.com/joe-articles"
+
 POINT_LAYERS = [
     ("energy_conflicts", "red", "Conflits énergétiques"),
     ("social_tensions", "orange", "Tensions sociales"),
@@ -428,8 +432,113 @@ Positionné en bas, centré horizontalement sur la carte. Deux pièges déjà
         self.backend_url = backend_url
 
 
+class _JoeWidget(MacroElement):
+    """
+    Panneau flottant à gauche de la carte, menu déroulant listant les articles
+    analysés par l'agent Joe (clients/joe_agent.py) : date/heure, pays, nom de
+    domaine de la source, résumé — via l'endpoint /joe-articles de scheduler.py
+    (voir qa/engine.get_joe_articles).
+
+    Replié par défaut (juste un bouton d'en-tête) : la liste n'est chargée
+    qu'au premier dépliage plutôt qu'au chargement de la page, pour éviter une
+    requête réseau inutile si l'utilisateur ne l'ouvre jamais (et éviter de
+    réveiller le service Render endormi juste pour ça).
+    """
+
+    _template = Template(
+        """
+        {% macro script(this, kwargs) %}
+        (function() {
+            var map = {{ this._parent.get_name() }};
+            var container = L.DomUtil.create('div', 'joe-widget-control', map.getContainer());
+            container.style.position = 'absolute';
+            container.style.top = '20px';
+            container.style.left = '10px';
+            container.style.zIndex = 1000;
+            container.style.background = 'white';
+            container.style.borderRadius = '10px';
+            container.style.boxShadow = '0 2px 10px rgba(0,0,0,0.35)';
+            container.style.width = 'min(320px, calc(100vw - 24px))';
+            container.style.maxWidth = 'calc(100vw - 24px)';
+            container.style.boxSizing = 'border-box';
+            container.style.fontFamily = 'sans-serif';
+            container.style.fontSize = '13px';
+            container.style.color = '#222';
+            container.style.overflow = 'hidden';
+            container.innerHTML =
+                '<button id="joe-toggle-btn" style="width:100%; text-align:left; cursor:pointer; ' +
+                'padding:10px 12px; min-height:36px; font-size:14px; font-weight:bold; border:none; ' +
+                'background:white; border-radius:10px;">🤖 Articles analysés par Joe ▾</button>' +
+                '<div id="joe-panel" style="display:none; max-height:60vh; overflow-y:auto; padding:0 12px 12px;">' +
+                '<div id="joe-list">Chargement…</div>' +
+                '</div>';
+            L.DomEvent.disableClickPropagation(container);
+            L.DomEvent.disableScrollPropagation(container);
+
+            const BACKEND_URL = "{{ this.backend_url }}";
+            const toggleBtn = document.getElementById("joe-toggle-btn");
+            const panel = document.getElementById("joe-panel");
+            const list = document.getElementById("joe-list");
+            let loaded = false;
+
+            function renderArticles(articles) {
+                if (!articles.length) {
+                    list.textContent = "Aucun article analysé par Joe pour le moment.";
+                    return;
+                }
+                list.innerHTML = articles.map(function(a) {
+                    const d = a.date ? new Date(a.date) : null;
+                    const dateStr = d ? d.toLocaleString("fr-FR", {
+                        day: "2-digit", month: "2-digit", year: "numeric",
+                        hour: "2-digit", minute: "2-digit"
+                    }) : "date inconnue";
+                    const pays = a.pays || "?";
+                    const source = a.source || "?";
+                    const theme = a.categorie || "?";
+                    const resume = a.resume || "(pas de résumé)";
+                    const link = a.url ? '<a href="' + a.url + '" target="_blank" style="font-size:11px;">source</a>' : "";
+                    return '<div style="padding:8px 0; border-bottom:1px solid #eee;">' +
+                        '<div style="font-size:11px; color:#666;">' + dateStr + ' · ' + pays + ' · ' + source + '</div>' +
+                        '<div style="font-size:11px; font-weight:bold; margin-top:2px;">🤖 ' + theme + '</div>' +
+                        '<div style="margin-top:2px;">' + resume + '</div>' +
+                        '<div style="margin-top:2px;">' + link + '</div>' +
+                        '</div>';
+                }).join("");
+            }
+
+            toggleBtn.addEventListener("click", function() {
+                const isOpen = panel.style.display !== "none";
+                panel.style.display = isOpen ? "none" : "block";
+                toggleBtn.innerHTML = "🤖 Articles analysés par Joe " + (isOpen ? "▾" : "▴");
+                if (!isOpen && !loaded) {
+                    loaded = true;
+                    fetch(BACKEND_URL + "?limit=30")
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) { renderArticles(data.articles || []); })
+                        .catch(function() {
+                            list.textContent = "Service indisponible (le service Render peut mettre "
+                                + "30-60s à se réveiller s'il était endormi — réessayez).";
+                            loaded = false;
+                        });
+                }
+            });
+        })();
+        {% endmacro %}
+        """
+    )
+
+    def __init__(self, backend_url: str):
+        super().__init__()
+        self._name = "JoeWidget"
+        self.backend_url = backend_url
+
+
 def _add_qa_widget(m: folium.Map) -> None:
     _QaWidget(QA_BACKEND_URL).add_to(m)
+
+
+def _add_joe_widget(m: folium.Map) -> None:
+    _JoeWidget(JOE_BACKEND_URL).add_to(m)
 
 
 def build_map(output_path: Path = OUTPUT_PATH) -> Path:
@@ -469,6 +578,7 @@ def build_map(output_path: Path = OUTPUT_PATH) -> Path:
     # couches recouvrirait la quasi-totalité de la carte.
     folium.LayerControl(collapsed=True).add_to(m)
     _add_qa_widget(m)
+    _add_joe_widget(m)
     m.save(str(output_path))
     logger.info("build_map: carte générée -> %s", output_path)
     return output_path
