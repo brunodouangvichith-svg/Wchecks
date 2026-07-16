@@ -35,6 +35,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 import config
 from collectors import (
+    collect_agences_presses_contents,
     collect_brent,
     collect_conflicts,
     collect_country_news,
@@ -44,8 +45,8 @@ from collectors import (
     collect_defense_budget,
     collect_economy,
     collect_industry,
-    collect_joe_analysis,
     collect_international_organizations_contents,
+    collect_joe_analysis,
     collect_maritime_traffic,
     collect_military_activity,
     collect_national_newspapers_contents,
@@ -90,6 +91,11 @@ JOBS = [
         "international_organizations_contents",
         config.FREQUENCIES_MINUTES["international_organizations_contents"],
         collect_international_organizations_contents.run,
+    ),
+    (
+        "agences_presses_contents",
+        config.FREQUENCIES_MINUTES["agences_presses_contents"],
+        collect_agences_presses_contents.run,
     ),
 ]
 

@@ -36,6 +36,7 @@ _JOE_SOURCE_TABLES = [
 _JOE_REFERENCE_TABLES = [
     ("national_newspapers_contents", "country"),
     ("international_organizations_contents", "region"),
+    ("agences_presses_contents", "country"),
 ]
 
 

@@ -54,6 +54,9 @@ FREQUENCIES_MINUTES = {
     # petit volume (~30 journaux), pas besoin de plus frequent.
     "national_newspapers_contents": 24 * 60,
     "international_organizations_contents": 24 * 60,
+    # agences_presses_contents : "2 ou 3 fois par jour" (voir demande) -
+    # toutes les 8h donne 3 executions/jour.
+    "agences_presses_contents": 8 * 60,
     "risk_score": 6 * 60,
     # Minerais (USGS) : pas de fréquence -> déclenchement manuel uniquement
     # (voir cli.py --minerals-refresh)
