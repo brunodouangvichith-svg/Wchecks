@@ -45,6 +45,7 @@ from collectors import (
     collect_economy,
     collect_industry,
     collect_joe_analysis,
+    collect_international_organizations_contents,
     collect_maritime_traffic,
     collect_military_activity,
     collect_national_newspapers_contents,
@@ -84,6 +85,11 @@ JOBS = [
         "national_newspapers_contents",
         config.FREQUENCIES_MINUTES["national_newspapers_contents"],
         collect_national_newspapers_contents.run,
+    ),
+    (
+        "international_organizations_contents",
+        config.FREQUENCIES_MINUTES["international_organizations_contents"],
+        collect_international_organizations_contents.run,
     ),
 ]
 

@@ -53,6 +53,7 @@ FREQUENCIES_MINUTES = {
     # national_newspapers_contents : "une fois par jour" (voir demande) -
     # petit volume (~30 journaux), pas besoin de plus frequent.
     "national_newspapers_contents": 24 * 60,
+    "international_organizations_contents": 24 * 60,
     "risk_score": 6 * 60,
     # Minerais (USGS) : pas de fréquence -> déclenchement manuel uniquement
     # (voir cli.py --minerals-refresh)
