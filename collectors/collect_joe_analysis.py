@@ -20,7 +20,10 @@ from clients.neon_client import get_connection, upsert_generic
 
 logger = logging.getLogger(__name__)
 
-SOURCE_TABLES = ["energy_conflicts", "social_tensions", "military_activity", "official_statements"]
+SOURCE_TABLES = [
+    "energy_conflicts", "social_tensions", "military_activity", "official_statements",
+    "country_news",
+]
 
 
 def _pending_articles(cur, limit_per_table: int) -> list[tuple[str, str]]:

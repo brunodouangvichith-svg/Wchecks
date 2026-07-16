@@ -36,6 +36,8 @@ import config
 from collectors import (
     collect_brent,
     collect_conflicts,
+    collect_country_news,
+    collect_country_sources,
     collect_credit_ratings,
     collect_debt,
     collect_defense_budget,
@@ -73,6 +75,8 @@ JOBS = [
     ("credit_ratings", config.FREQUENCIES_MINUTES["worldbank_indicators"], collect_credit_ratings.run),
     ("risk_score", config.FREQUENCIES_MINUTES["risk_score"], risk_score.run),
     ("joe_analysis", config.FREQUENCIES_MINUTES["joe_analysis"], collect_joe_analysis.run),
+    ("country_sources", config.FREQUENCIES_MINUTES["country_sources"], collect_country_sources.run),
+    ("country_news", config.FREQUENCIES_MINUTES["country_news"], collect_country_news.run),
 ]
 
 _consecutive_failures: dict[str, int] = {}

@@ -25,6 +25,7 @@ _JOE_SOURCE_TABLES = [
     ("social_tensions", "pays"),
     ("military_activity", "pays"),
     ("official_statements", "institution"),
+    ("country_news", "pays_code"),
 ]
 
 

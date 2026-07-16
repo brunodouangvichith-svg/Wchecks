@@ -43,6 +43,13 @@ FREQUENCIES_MINUTES = {
     "maritime_traffic": 6 * 60,  # 4x/jour
     "official_statements": 90,  # toutes les 1h30
     "joe_analysis": 6 * 60,  # aligné sur le cycle GDELT (conflicts/social_tensions/military)
+    # country_sources : annuaire journaux/sites officiels par pays (agent Joe),
+    # change très rarement -> rafraîchi mensuellement comme les indicateurs World Bank.
+    "country_sources": 30 * 24 * 60,
+    # country_news : lecture des flux RSS découverts, volume potentiellement
+    # important (jusqu'à ~150 sources) -> cadence quotidienne plutôt que le
+    # cycle 6h des autres flux, pour rester raisonnable en temps d'exécution.
+    "country_news": 24 * 60,
     "risk_score": 6 * 60,
     # Minerais (USGS) : pas de fréquence -> déclenchement manuel uniquement
     # (voir cli.py --minerals-refresh)

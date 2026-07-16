@@ -49,6 +49,8 @@ TABLE_COLUMNS = {
     "risk_scores": ["pays_code", "date_calcul", "score_global", "details_json"],
     "credit_ratings": ["pays_code", "agence", "note", "perspective", "date_notation"],
     "joe_analysis": ["source_table", "url", "categorie", "gravite", "acteurs", "resume_ia", "modele"],
+    "country_sources": ["pays_code", "nom_source", "type_source", "url", "feed_url"],
+    "country_news": ["pays_code", "source_nom", "url", "date", "titre", "resume", "source_verifiee"],
 }
 
 # Colonnes formant la contrainte UNIQUE de chaque table (voir db/schema.sql).
@@ -71,6 +73,8 @@ TABLE_CONFLICT_KEYS = {
     "risk_scores": ["pays_code", "date_calcul"],
     "credit_ratings": ["pays_code", "agence"],
     "joe_analysis": ["source_table", "url"],
+    "country_sources": ["pays_code", "nom_source"],
+    "country_news": ["url"],
 }
 
 # Champ utilisé pour trier "le plus récent d'abord" dans get_latest()/get_history().
@@ -93,6 +97,8 @@ ORDER_FIELD = {
     "risk_scores": "date_calcul",
     "credit_ratings": "date_notation",
     "joe_analysis": "created_at",
+    "country_sources": "created_at",
+    "country_news": "date",
 }
 
 _pool: ConnectionPool | None = None

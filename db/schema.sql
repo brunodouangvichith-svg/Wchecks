@@ -234,3 +234,37 @@ CREATE TABLE IF NOT EXISTS joe_analysis (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (source_table, url)
 );
+
+-- Annuaire des journaux nationaux et sites officiels par pays, découvert par
+-- l'agent Joe (LLM Gemini, connaissances du modèle — PAS une recherche web
+-- réelle, voir clients/joe_agent.discover_country_sources). feed_url est le
+-- flux RSS découvert pour cette source (clients/rss_client.discover_feed_url),
+-- NULL si aucun flux exploitable n'a été trouvé (fréquent pour les sites
+-- officiels/gouvernementaux) — ces sources restent dans l'annuaire mais ne
+-- sont pas lues automatiquement (voir country_news).
+CREATE TABLE IF NOT EXISTS country_sources (
+    id BIGSERIAL PRIMARY KEY,
+    pays_code TEXT NOT NULL,
+    nom_source TEXT NOT NULL,
+    type_source TEXT,
+    url TEXT NOT NULL,
+    feed_url TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (pays_code, nom_source)
+);
+
+-- Articles lus depuis les flux RSS découverts dans country_sources — même
+-- structure/traitement que official_statements (scraping + résumé extractif
+-- via clients/article_scraper.py), mais par pays plutôt que par institution.
+CREATE TABLE IF NOT EXISTS country_news (
+    id BIGSERIAL PRIMARY KEY,
+    pays_code TEXT NOT NULL,
+    source_nom TEXT,
+    url TEXT NOT NULL,
+    date TIMESTAMPTZ,
+    titre TEXT,
+    resume TEXT,
+    source_verifiee BOOLEAN,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (url)
+);
