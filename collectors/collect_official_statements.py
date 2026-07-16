@@ -1,4 +1,11 @@
-"""Collecte des déclarations officielles des chancelleries/institutions — flux RSS."""
+"""Collecte des déclarations officielles des chancelleries/institutions — flux RSS.
+
+Pas de filtre par mot-clé (voir clients/rss_client.py) : les flux suivis sont
+déjà une sélection restreinte de 2-3 institutions, filtrer en plus par
+vocabulaire énergie/conflit ne laissait passer presque aucune entrée (les
+titres institutionnels/diplomatiques n'utilisent que rarement ces mots
+explicitement).
+"""
 
 import logging
 
@@ -10,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def run() -> int:
-    rows = fetch_statements(config.RSS_FEEDS, config.RSS_KEYWORDS)
+    rows = fetch_statements(config.RSS_FEEDS)
     return upsert_generic("official_statements", rows)
 
 

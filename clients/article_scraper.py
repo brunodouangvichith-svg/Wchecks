@@ -39,6 +39,20 @@ USER_AGENT = (
     "+https://github.com/brunodouangvichith-svg/Wchecks)"
 )
 
+# Marqueurs de page anti-bot (Cloudflare et équivalents) : ces pages répondent
+# souvent en HTTP 200 avec un contenu HTML normal, donc indiscernables d'un
+# vrai article sans regarder le texte — constaté sur press.un.org, qui renvoie
+# "Client Challenge [...] couldn't load" au lieu du communiqué demandé. Notre
+# scraper (requests + BeautifulSoup, sans exécution JS) ne peut pas passer ce
+# type de challenge ; le détecter évite de faire analyser une page vide/fausse
+# par Joe (clients/joe_agent.py) ou de marquer `source_verifiee=True` à tort.
+_BOT_CHALLENGE_MARKERS = [
+    "client challenge",
+    "checking your browser",
+    "verify you are human",
+    "enable javascript and cookies",
+]
+
 
 def _extract_main_text(soup: BeautifulSoup) -> str:
     """
@@ -92,6 +106,8 @@ def verify_and_extract(url: str) -> tuple[bool, str | None]:
             tag.decompose()
         text = _extract_main_text(soup)
         if not text:
+            return False, None
+        if any(marker in text.lower() for marker in _BOT_CHALLENGE_MARKERS):
             return False, None
         return True, text[:MAX_TEXT_CHARS]
     except Exception as exc:

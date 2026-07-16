@@ -105,14 +105,14 @@ WORLDBANK_INDICATORS = {
 STRATEGIC_MINERALS = ["copper", "lithium", "uranium", "rare_earths", "gold", "cobalt"]
 
 # --- Flux RSS officiels (démarrage volontairement restreint, voir README) ---
+# Pas de filtre par mot-clé (toutes les entrées de ces flux sont conservées,
+# voir clients/rss_client.py) : la sélection restreinte à 2-3 institutions
+# fait déjà office de filtre de pertinence.
 RSS_FEEDS = {
     "onu": "https://press.un.org/en/rss.xml",
     "us_state_dept": "https://www.state.gov/rss-feed/press-releases/feed/",
     "commission_europeenne": "https://ec.europa.eu/commission/presscorner/api/rss?language=en",
 }
-RSS_KEYWORDS = [
-    "sanctions", "oil", "energy", "military", "OPEC", "pipeline", "strait",
-]
 
 # --- AISstream : filtre type de navire (tankers = 80-89) ---
 AIS_TANKER_SHIP_TYPES = list(range(80, 90))

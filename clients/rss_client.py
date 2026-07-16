@@ -19,14 +19,21 @@ logger = logging.getLogger(__name__)
 TIMEOUT_SECONDS = 20
 
 
-def fetch_statements(feeds: dict[str, str], keywords: list[str]) -> list[dict]:
+def fetch_statements(feeds: dict[str, str], keywords: list[str] | None = None) -> list[dict]:
     """
-    Parcourt chaque flux RSS de `feeds` ({institution: url}) et retourne les entrées
-    dont le titre ou le résumé contient au moins un mot-clé de `keywords`.
+    Parcourt chaque flux RSS de `feeds` ({institution: url}) et retourne toutes
+    ses entrées (aucun filtre par mot-clé : les flux suivis sont déjà une
+    sélection restreinte de 2-3 institutions, voir config.RSS_FEEDS — filtrer
+    en plus par mot-clé sur des titres institutionnels/diplomatiques, souvent
+    formulés sans vocabulaire énergie/conflit explicite, ne laissait passer que
+    de rares correspondances, voir historique du projet).
+
+    `keywords` est gardé en paramètre (inutilisé si None/omis) pour compatibilité
+    ascendante avec un éventuel appelant qui voudrait filtrer explicitement.
 
     Retourne une liste de dicts {url, date, institution, titre, extrait, langue}.
     """
-    keywords_lower = [kw.lower() for kw in keywords]
+    keywords_lower = [kw.lower() for kw in keywords] if keywords else None
     rows: list[dict] = []
 
     for institution, feed_url in feeds.items():
@@ -39,9 +46,11 @@ def fetch_statements(feeds: dict[str, str], keywords: list[str]) -> list[dict]:
         for entry in entries:
             title = entry.get("title", "")
             summary = entry.get("summary", "")
-            haystack = f"{title} {summary}".lower()
-            if not any(kw in haystack for kw in keywords_lower):
-                continue
+
+            if keywords_lower:
+                haystack = f"{title} {summary}".lower()
+                if not any(kw in haystack for kw in keywords_lower):
+                    continue
 
             url = entry.get("link")
             if not url:

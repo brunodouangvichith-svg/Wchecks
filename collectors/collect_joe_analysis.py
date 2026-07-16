@@ -27,6 +27,13 @@ def _pending_articles(cur, limit_per_table: int) -> list[tuple[str, str]]:
     """
     Retourne [(source_table, url)] pour les articles déjà vérifiés (scraping
     réussi) sans analyse Joe existante, les plus récents d'abord.
+
+    `limit_per_table` est appliqué À CHAQUE TABLE, pas globalement : une table
+    à fort volume (energy_conflicts, social_tensions) a presque toujours un
+    backlog qui dépasse le budget total à elle seule — sans répartition par
+    table, un simple `candidates[:budget]` pris sur la liste concaténée finit
+    par ne traiter QUE la première table de SOURCE_TABLES à chaque cycle,
+    privant les autres (dont official_statements) d'analyse Joe indéfiniment.
     """
     pending = []
     for table in SOURCE_TABLES:
@@ -45,11 +52,11 @@ def _pending_articles(cur, limit_per_table: int) -> list[tuple[str, str]]:
 
 
 def run() -> int:
+    per_table_limit = max(1, config.JOE_MAX_ARTICLES_PER_RUN // len(SOURCE_TABLES))
+
     with get_connection() as conn:
         with conn.cursor() as cur:
-            candidates = _pending_articles(cur, config.JOE_MAX_ARTICLES_PER_RUN)
-
-    candidates = candidates[: config.JOE_MAX_ARTICLES_PER_RUN]
+            candidates = _pending_articles(cur, per_table_limit)
 
     rows = []
     for table, url in candidates:
