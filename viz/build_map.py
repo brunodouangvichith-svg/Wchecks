@@ -2,37 +2,26 @@
 Génère la carte interactive `carte_mondiale.html` (Folium/Leaflet, tuiles
 OpenStreetMap) à partir des données stockées dans Neon.
 
-Couches par points : conflits énergétiques (rouge), tensions sociales (orange),
-activité militaire (violet), trafic maritime (icône bateau, bleu), déclarations
-officielles (positionnées sur la capitale/siège de l'institution émettrice).
+Couches par points : conflits énergétiques (rouge), tensions sociales (orange).
 
-Couches choroplèthes par pays (une sélectionnable à la fois via LayerControl) :
-dette, chômage, inflation, budget défense, production pétrolière/gazière,
-production industrielle, minerais stratégiques (une couche par matière).
-
-GeoJSON des frontières : viz/data/world_countries.geojson — dérivé de Natural
-Earth (domaine public), redistribué via github.com/johan/world.geo.json.
+Widgets flottants : questions/réponses (bas, centré) et articles analysés par
+l'agent Joe (gauche).
 """
 
-import copy
 import html
-import json
 import logging
 from pathlib import Path
 
 import folium
-import pandas as pd
 from branca.element import MacroElement
 from folium.plugins import MarkerCluster
 from jinja2 import Template
 
 import config
-from clients.neon_client import ORDER_FIELD, get_connection
-from mapping.country_mapping import COUNTRY_NAME_TO_ISO3
+from clients.neon_client import get_connection
 
 logger = logging.getLogger(__name__)
 
-GEOJSON_PATH = config.BASE_DIR / "viz" / "data" / "world_countries.geojson"
 OUTPUT_PATH = config.BASE_DIR / "carte_mondiale.html"
 
 # Backend interrogé par le widget vocal/texte (endpoint /ask de scheduler.py, déployé
@@ -47,47 +36,7 @@ JOE_BACKEND_URL = "https://globalchecks-scheduler.onrender.com/joe-articles"
 POINT_LAYERS = [
     ("energy_conflicts", "red", "Conflits énergétiques"),
     ("social_tensions", "orange", "Tensions sociales"),
-    ("military_activity", "purple", "Activité militaire"),
 ]
-
-# (table, colonne, légende, palette de couleurs branca)
-CHOROPLETH_SPECS = [
-    ("country_economy", "chomage_pct", "Chômage (%)", "OrRd"),
-    ("country_economy", "inflation_pct", "Inflation (%)", "YlOrRd"),
-    ("defense_budget", "budget_pct_pib", "Budget défense (% du PIB)", "Purples"),
-    ("oil_production", "valeur_barils_jour", "Production pétrolière (milliers de barils/jour)", "Blues"),
-    ("gas_production", "valeur_production_gaz", "Production de gaz naturel (milliards de m³)", "Greens"),
-    ("country_industry", "production_industrielle_pct_pib", "Production industrielle (% du PIB)", "BuPu"),
-]
-
-# Position approximative du siège/de la capitale de chaque institution suivie en RSS.
-INSTITUTION_LOCATIONS = {
-    "onu": (40.7489, -73.9680),  # siège des Nations Unies, New York
-    "us_state_dept": (38.8951, -77.0364),  # Washington D.C.
-    "commission_europeenne": (50.8503, 4.3517),  # Bruxelles
-}
-
-
-def _load_enriched_geojson() -> dict:
-    data = json.loads(GEOJSON_PATH.read_text(encoding="utf-8"))
-    unmatched = set()
-    for feature in data["features"]:
-        name = feature["properties"].get("name")
-        iso3 = COUNTRY_NAME_TO_ISO3.get(name)
-        # folium traite une valeur de clé `None` comme une erreur fatale ("key_on not
-        # found"), pas comme une donnée manquante à griser — on utilise donc une chaîne
-        # vide (qui ne correspondra jamais à un vrai code ISO3) pour les entités sans
-        # pays connu (territoires, zones disputées).
-        feature["properties"]["iso3"] = iso3 or ""
-        if iso3 is None:
-            unmatched.add(name)
-    if unmatched:
-        logger.info(
-            "build_map: %d entité(s) du GeoJSON sans correspondance pays "
-            "(territoires/zones disputées, attendu) : %s",
-            len(unmatched), sorted(unmatched),
-        )
-    return data
 
 
 def _add_point_layer(m: folium.Map, cur, table: str, color: str, label: str) -> None:
@@ -123,140 +72,6 @@ def _add_point_layer(m: folium.Map, cur, table: str, color: str, label: str) -> 
         ).add_to(cluster)
     fg.add_to(m)
     logger.info("build_map: %s -> %d point(s)", table, len(rows))
-
-
-def _add_maritime_layer(m: folium.Map, cur) -> None:
-    fg = folium.FeatureGroup(name="Trafic maritime (tankers)", show=False)
-    cluster = MarkerCluster().add_to(fg)
-    cur.execute(
-        "SELECT lat, lon, mmsi, zone_strategique, vitesse, cap FROM maritime_traffic "
-        "WHERE lat IS NOT NULL AND lon IS NOT NULL"
-    )
-    rows = cur.fetchall()
-    for lat, lon, mmsi, zone, vitesse, cap in rows:
-        popup_html = (
-            f"MMSI {html.escape(str(mmsi))}<br>Zone : {html.escape(zone or '?')}"
-            f"<br>Vitesse : {vitesse if vitesse is not None else '?'} nœuds"
-            f"<br>Cap : {cap if cap is not None else '?'}°"
-        )
-        folium.Marker(
-            location=[lat, lon],
-            icon=folium.Icon(color="blue", icon="ship", prefix="fa"),
-            popup=folium.Popup(popup_html, max_width=250),
-        ).add_to(cluster)
-    fg.add_to(m)
-    logger.info("build_map: maritime_traffic -> %d point(s)", len(rows))
-
-
-def _add_statements_layer(m: folium.Map, cur) -> None:
-    fg = folium.FeatureGroup(name="Déclarations officielles", show=False)
-    cur.execute(
-        "SELECT s.institution, s.titre, s.url, s.date, s.source_verifiee, s.resume, j.categorie, j.gravite "
-        "FROM official_statements s LEFT JOIN joe_analysis j "
-        "  ON j.source_table = 'official_statements' AND j.url = s.url"
-    )
-    rows = cur.fetchall()
-    n = 0
-    for institution, titre, url, date, verifiee, resume, categorie, gravite in rows:
-        location = INSTITUTION_LOCATIONS.get(institution)
-        if location is None:
-            continue
-        popup_html = f"<b>{html.escape(titre or '(sans titre)')}</b><br>{date or ''}"
-        if resume:
-            popup_html += f"<br>{html.escape(resume)}"
-        if categorie:
-            popup_html += f"<br>🤖 Joe : {html.escape(categorie)} ({html.escape(gravite or '?')})"
-        if verifiee:
-            popup_html += "<br>✅ source vérifiée (scraping)"
-        if url:
-            popup_html += f'<br><a href="{html.escape(url)}" target="_blank">source</a>'
-        folium.CircleMarker(
-            location=location, radius=5, color="green", fill=True, fill_opacity=0.6,
-            popup=folium.Popup(popup_html, max_width=300),
-        ).add_to(fg)
-        n += 1
-    fg.add_to(m)
-    logger.info("build_map: official_statements -> %d point(s)", n)
-
-
-def _add_choropleth(
-    m: folium.Map, cur, table: str, value_col: str, legend_name: str, color_scheme: str,
-    geojson_data: dict, mineral: str | None = None,
-    tooltip_cols: list[tuple[str, str]] | None = None,
-) -> None:
-    """
-    `tooltip_cols` : liste ordonnée (colonne, libellé) affichée dans l'info-bulle
-    au survol — par défaut juste `[(value_col, legend_name)]` (comportement
-    d'origine). La couleur de la choroplèthe reste TOUJOURS pilotée par
-    `value_col` seul, quel que soit `tooltip_cols` — ça permet de fondre deux
-    métriques liées (ex. dette en % du PIB + montant en milliards de USD) dans
-    une seule couche/légende au lieu d'une couche par métrique, avec un ordre
-    d'affichage dans l'info-bulle indépendant de celle qui colore la carte.
-    """
-    tooltip_cols = tooltip_cols or [(value_col, legend_name)]
-    fetch_cols = [value_col] + [c for c, _ in tooltip_cols if c != value_col]
-    select_cols = ", ".join(fetch_cols)
-    if mineral:
-        cur.execute(
-            f"""
-            SELECT DISTINCT ON (pays_code) pays_code, {select_cols}
-            FROM {table}
-            WHERE matiere_premiere = %s AND {value_col} IS NOT NULL
-            ORDER BY pays_code, annee DESC
-            """,
-            (mineral,),
-        )
-    else:
-        order_col = ORDER_FIELD[table]
-        cur.execute(
-            f"""
-            SELECT DISTINCT ON (pays_code) pays_code, {select_cols}
-            FROM {table}
-            WHERE {value_col} IS NOT NULL
-            ORDER BY pays_code, {order_col} DESC
-            """
-        )
-    rows = cur.fetchall()
-    if not rows:
-        logger.info("build_map: aucune donnée pour la choroplèthe '%s'", legend_name)
-        return
-
-    col_index = {col: i + 1 for i, col in enumerate(fetch_cols)}  # +1 : index 0 = pays_code
-    row_by_iso3 = {row[0]: row for row in rows}
-
-    # Copie propre à cette couche : chaque choroplèthe a sa propre valeur par pays,
-    # injectée dans les properties pour alimenter l'info-bulle au survol/clic
-    # (sans ça, cliquer un pays coloré ne montre rien — voir les marqueurs GDELT
-    # empilés au centroïde du pays, qui eux ont un popup, d'où la confusion).
-    layer_geojson = copy.deepcopy(geojson_data)
-    for feature in layer_geojson["features"]:
-        iso3 = feature["properties"].get("iso3")
-        row = row_by_iso3.get(iso3)
-        for col, _label in tooltip_cols:
-            val = row[col_index[col]] if row else None
-            feature["properties"][f"tt_{col}"] = f"{float(val):g}" if val is not None else "Pas de donnée"
-
-    df = pd.DataFrame(
-        [(row[0], row[col_index[value_col]]) for row in rows], columns=["iso3", "value"]
-    ).astype({"value": float})
-    choropleth = folium.Choropleth(
-        geo_data=layer_geojson,
-        name=legend_name,
-        data=df,
-        columns=["iso3", "value"],
-        key_on="feature.properties.iso3",
-        fill_color=color_scheme,
-        fill_opacity=0.7,
-        line_opacity=0.2,
-        legend_name=legend_name,
-        nan_fill_color="white",
-        show=False,
-    ).add_to(m)
-    folium.GeoJsonTooltip(
-        fields=["name"] + [f"tt_{col}" for col, _ in tooltip_cols],
-        aliases=["Pays :"] + [f"{label} :" for _, label in tooltip_cols],
-    ).add_to(choropleth.geojson)
-    logger.info("build_map: choroplèthe '%s' -> %d pays", legend_name, len(rows))
 
 
 class _QaWidget(MacroElement):
@@ -525,36 +340,12 @@ def _add_joe_widget(m: folium.Map) -> None:
 
 
 def build_map(output_path: Path = OUTPUT_PATH) -> Path:
-    geojson_data = _load_enriched_geojson()
     m = folium.Map(location=[20, 10], zoom_start=2, tiles="OpenStreetMap")
 
     with get_connection() as conn:
         with conn.cursor() as cur:
             for table, color, label in POINT_LAYERS:
                 _add_point_layer(m, cur, table, color, label)
-            _add_maritime_layer(m, cur)
-            _add_statements_layer(m, cur)
-
-            # Dette publique : une seule couche/légende "Dette publique" (coloration
-            # pilotée par le % du PIB, plus comparable entre pays que le montant
-            # nominal qui écraserait tout sur les seules grandes économies),
-            # l'info-bulle affichant les deux métriques (montant en premier).
-            _add_choropleth(
-                m, cur, "country_debt", "dette_pct_pib", "Dette publique", "Reds", geojson_data,
-                tooltip_cols=[
-                    ("dette_montant_milliards_usd", "Dette publique (milliards de USD)"),
-                    ("dette_pct_pib", "Dette publique (% du PIB)"),
-                ],
-            )
-
-            for table, col, legend, scheme in CHOROPLETH_SPECS:
-                _add_choropleth(m, cur, table, col, legend, scheme, geojson_data)
-
-            for mineral in config.STRATEGIC_MINERALS:
-                _add_choropleth(
-                    m, cur, "minerals_production", "volume_tonnes",
-                    f"Production de {mineral} (tonnes)", "YlOrBr", geojson_data, mineral=mineral,
-                )
 
     # collapsed=True (icône repliée, dépliée au tap/hover) plutôt qu'ouvert en
     # permanence : sur un écran de téléphone, la liste dépliée de toutes les
