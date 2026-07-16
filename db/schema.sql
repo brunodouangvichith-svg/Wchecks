@@ -344,3 +344,20 @@ CREATE TABLE IF NOT EXISTS international_organizations_contents (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (website_url)
 );
+
+-- Annuaire de référence des grandes agences de presse mondiales (Big Three
+-- généralistes, agences financières, agences nationales/régionales à portée
+-- internationale) — même principe que national_newspapers : peuplé une fois
+-- via scripts/populate_agences_presses.py, données statiques, pas de
+-- collector planifié.
+CREATE TABLE IF NOT EXISTS agences_presses (
+    id BIGSERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL,
+    country TEXT NOT NULL,
+    specialty TEXT,
+    website_url TEXT NOT NULL,
+    region TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (name)
+);
