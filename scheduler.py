@@ -34,6 +34,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 import config
+from logging_config import configure_logging
 from collectors import (
     collect_agences_presses_contents,
     collect_brent,
@@ -52,6 +53,8 @@ from collectors import (
     collect_national_newspapers_contents,
     collect_official_statements,
     collect_oil_gas_production,
+    collect_report_financial,
+    collect_report_hotspots,
     collect_social_tensions,
     collect_spr,
 )
@@ -97,6 +100,8 @@ JOBS = [
         config.FREQUENCIES_MINUTES["agences_presses_contents"],
         collect_agences_presses_contents.run,
     ),
+    ("report_hotspots", config.FREQUENCIES_MINUTES["report_hotspots"], collect_report_hotspots.run),
+    ("report_financial", config.FREQUENCIES_MINUTES["report_financial"], collect_report_financial.run),
 ]
 
 # Jobs planifiés à heures fixes (vraie expression cron) plutôt qu'à intervalle
@@ -108,22 +113,6 @@ CRON_JOBS = {
 }
 
 _consecutive_failures: dict[str, int] = {}
-
-
-def _configure_logging() -> None:
-    config.LOG_DIR.mkdir(parents=True, exist_ok=True)
-    formatter = logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s")
-
-    file_handler = logging.FileHandler(config.LOG_DIR / "scheduler.log", encoding="utf-8")
-    file_handler.setFormatter(formatter)
-
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-
-    root = logging.getLogger()
-    root.setLevel(logging.INFO)
-    root.addHandler(file_handler)
-    root.addHandler(console_handler)
 
 
 def _run_job(job_id: str, run_func) -> None:
@@ -198,6 +187,9 @@ class _HealthHandler(http.server.BaseHTTPRequestHandler):
       (voir qa/engine.py), pour l'interface vocale de la carte (viz/build_map.py).
     - GET /joe-articles?limit=N renvoie les articles analysés par l'agent Joe
       (voir qa/engine.get_joe_articles), pour le panneau dédié de la carte.
+    - GET /daily-report?type=hotspots|financial renvoie le dernier rapport
+      journalier généré par Joe (voir qa/engine.get_daily_report), pour les 2
+      boutons de rapport de la carte.
       Accès autorisé cross-origin (Access-Control-Allow-Origin: *) : la carte est
       servie depuis GitHub Pages, un domaine différent de celui de ce service.
     """
@@ -209,6 +201,9 @@ class _HealthHandler(http.server.BaseHTTPRequestHandler):
             return
         if parsed.path == "/joe-articles":
             self._handle_joe_articles(parsed)
+            return
+        if parsed.path == "/daily-report":
+            self._handle_daily_report(parsed)
             return
 
         self.send_response(200)
@@ -253,12 +248,29 @@ class _HealthHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _handle_daily_report(self, parsed) -> None:
+        report_type = parse_qs(parsed.query).get("type", [""])[0].strip()
+        try:
+            from qa.engine import get_daily_report
+
+            report = get_daily_report(report_type) if report_type else None
+        except Exception:
+            logger.exception("/daily-report : échec pour type '%s'", report_type)
+            report = None
+
+        body = json.dumps({"report": report}).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body)
+
     def log_message(self, format, *args) -> None:
         pass  # évite de polluer scheduler.log avec chaque requête de ping
 
 
 def main() -> None:
-    _configure_logging()
+    configure_logging()
     signal.signal(signal.SIGTERM, _handle_sigterm)
 
     logger.info("démarrage du scheduler (%d job(s) planifié(s))", len(JOBS))

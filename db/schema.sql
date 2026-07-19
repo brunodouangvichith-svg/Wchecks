@@ -379,3 +379,16 @@ CREATE TABLE IF NOT EXISTS agences_presses_contents (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (website_url)
 );
+
+-- Rapports journaliers synthétisés par Joe, classés par thème (voir
+-- clients/joe_agent.generate_themed_report). Une ligne par type de rapport
+-- ('hotspots' ou 'financial'), ÉCRASÉE chaque jour — reflète la synthèse du
+-- jour, pas un historique. `themes` : JSONB, liste de
+-- [{"theme": "...", "summary": "..."}, ...].
+CREATE TABLE IF NOT EXISTS daily_reports (
+    id BIGSERIAL PRIMARY KEY,
+    report_type TEXT NOT NULL,
+    themes JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (report_type)
+);

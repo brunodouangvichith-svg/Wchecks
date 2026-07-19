@@ -12,6 +12,8 @@ import argparse
 from rich.console import Console
 from rich.table import Table
 
+from logging_config import configure_logging
+
 console = Console()
 
 
@@ -59,6 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    configure_logging()
     parser = build_parser()
     args = parser.parse_args()
 

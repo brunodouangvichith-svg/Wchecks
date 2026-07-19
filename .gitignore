@@ -4,6 +4,7 @@ __pycache__/
 venv/
 .env
 logs/*.log
+logs/subagents/
 carte_mondiale.html
 .DS_Store
 

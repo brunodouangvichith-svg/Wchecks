@@ -15,13 +15,10 @@ factorise uniquement la logique commune (lire l'annuaire, prioriser les
 volume par Joe, analyser par lots, enregistrer), pas le planning.
 """
 
-import logging
-
 from clients.article_scraper import verify_and_extract
 from clients.joe_agent import analyze_homepages_batch, orchestrate_subagent_batch
 from clients.neon_client import get_connection, upsert_generic
-
-logger = logging.getLogger(__name__)
+from logging_config import get_subagent_logger
 
 # Plafond dur par exécution, indépendant de la décision de Joe — protection
 # de dernier recours pour ne jamais soumettre un lot déraisonnable au tier
@@ -45,6 +42,8 @@ def run_subagent(name: str, directory_table: str, contents_table: str, directory
 
     Retourne le nombre de lignes effectivement enregistrées.
     """
+    logger = get_subagent_logger(name)
+
     # Les 3 tables d'annuaire (national_newspapers, international_organizations,
     # agences_presses) utilisent toutes littéralement "website_url" comme nom
     # de colonne — pas de correspondance à établir, `directory_columns` la

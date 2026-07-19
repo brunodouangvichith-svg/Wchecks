@@ -14,8 +14,9 @@ collectées et utilisées par le QA/l'agent Joe.)
 GeoJSON des frontières : viz/data/world_countries.geojson — dérivé de Natural
 Earth (domaine public), redistribué via github.com/johan/world.geo.json.
 
-Widgets flottants : questions/réponses (bas, centré) et articles analysés par
-l'agent Joe (gauche).
+Widgets flottants : questions/réponses (bas, centré), articles analysés par
+l'agent Joe (gauche) et 2 boutons de rapport journalier classé par thème
+(haut droite : points chauds de l'actualité / données financières).
 """
 
 import copy
@@ -48,6 +49,11 @@ QA_BACKEND_URL = "https://globalchecks-scheduler.onrender.com/ask"
 # scheduler.py, voir qa/engine.get_joe_articles).
 JOE_BACKEND_URL = "https://globalchecks-scheduler.onrender.com/joe-articles"
 
+# Backend des 2 boutons de rapport journalier (endpoint /daily-report de
+# scheduler.py, voir qa/engine.get_daily_report — sous-agents dédiés
+# collectors/collect_report_hotspots.py et collect_report_financial.py).
+REPORTS_BACKEND_URL = "https://globalchecks-scheduler.onrender.com/daily-report"
+
 POINT_LAYERS = [
     ("energy_conflicts", "red", "Conflits énergétiques"),
     ("social_tensions", "orange", "Tensions sociales"),
@@ -62,6 +68,22 @@ CHOROPLETH_SPECS = [
     ("gas_production", "valeur_production_gaz", "Production de gaz naturel (milliards de m³)", "Greens"),
     ("country_industry", "production_industrielle_pct_pib", "Production industrielle (% du PIB)", "BuPu"),
 ]
+
+
+def _neutralize_template_syntax(text: str) -> str:
+    """
+    Certains sites scrapés laissent fuiter tels quels leurs propres artefacts
+    de template non rendus côté serveur (ex. `{{hitsCtrl.values.hits}}`, un
+    widget de compteur de vues) dans le texte de l'article — une chaîne
+    parfaitement inerte pour nous, MAIS folium/Jinja2 re-parse l'intégralité
+    du HTML de la carte au moment du rendu (`m.save()`), et une séquence
+    `{{ ... }}` littérale dans un résumé scrapé est alors interprétée comme une
+    VRAIE expression Jinja — ce qui fait planter `build_map()` (constaté en
+    pratique sur un article Dailymirror contenant un tel artefact). On casse
+    la séquence en insérant un espace de largeur nulle entre les accolades
+    consécutives, sans changer l'affichage visible.
+    """
+    return text.replace("{{", "{​{").replace("}}", "}​}")
 
 
 def _load_enriched_geojson() -> dict:
@@ -103,11 +125,13 @@ def _add_point_layer(m: folium.Map, cur, table: str, color: str, label: str) -> 
     )
     rows = cur.fetchall()
     for lat, lon, titre, url, date, verifiee, resume, categorie, gravite in rows:
-        popup_html = f"<b>{html.escape(titre or '(sans titre)')}</b><br>{date or ''}"
+        titre_safe = _neutralize_template_syntax(titre or "(sans titre)")
+        popup_html = f"<b>{html.escape(titre_safe)}</b><br>{date or ''}"
         if resume:
-            popup_html += f"<br>{html.escape(resume)}"
+            popup_html += f"<br>{html.escape(_neutralize_template_syntax(resume))}"
         if categorie:
-            popup_html += f"<br>🤖 Joe : {html.escape(categorie)} ({html.escape(gravite or '?')})"
+            gravite_safe = _neutralize_template_syntax(gravite or "?")
+            popup_html += f"<br>🤖 Joe : {html.escape(_neutralize_template_syntax(categorie))} ({html.escape(gravite_safe)})"
         if verifiee:
             popup_html += "<br>✅ source vérifiée (scraping)"
         if url:
@@ -493,12 +517,129 @@ class _JoeWidget(MacroElement):
         self.backend_url = backend_url
 
 
+class _ReportsWidget(MacroElement):
+    """
+    2 boutons flottants en haut à droite de la carte donnant accès aux
+    rapports journaliers générés par les 2 sous-agents "rapport" de Joe
+    (collectors/collect_report_hotspots.py : points chauds de l'actualité
+    mondiale, tous domaines ; collect_report_financial.py : données
+    financières internationales et par pays). Chaque rapport est déjà classé
+    par thème par Joe (voir clients/joe_agent.generate_themed_report) — affiché
+    tel quel, une section par thème, dans une fenêtre modale plutôt qu'un bloc
+    de texte plat.
+    """
+
+    _template = Template(
+        """
+        {% macro script(this, kwargs) %}
+        (function() {
+            var map = {{ this._parent.get_name() }};
+            var container = L.DomUtil.create('div', 'reports-widget-control', map.getContainer());
+            container.style.position = 'absolute';
+            container.style.top = '20px';
+            container.style.right = '10px';
+            container.style.zIndex = 1000;
+            container.style.display = 'flex';
+            container.style.flexDirection = 'column';
+            container.style.gap = '6px';
+            container.style.fontFamily = 'sans-serif';
+            var btnStyle = 'padding:8px 12px; font-size:13px; font-family:sans-serif; border-radius:8px; ' +
+                'border:none; box-shadow:0 2px 10px rgba(0,0,0,0.35); background:white; cursor:pointer; ' +
+                'text-align:left;';
+            container.innerHTML =
+                '<button id="report-btn-hotspots" style="' + btnStyle + '">🌍 Rapport hotspots</button>' +
+                '<button id="report-btn-financial" style="' + btnStyle + '">💰 Rapport financier</button>';
+            L.DomEvent.disableClickPropagation(container);
+
+            var modal = L.DomUtil.create('div', 'reports-modal', map.getContainer());
+            modal.style.display = 'none';
+            modal.style.position = 'absolute';
+            modal.style.top = '0'; modal.style.left = '0'; modal.style.right = '0'; modal.style.bottom = '0';
+            modal.style.zIndex = 2000;
+            modal.style.background = 'rgba(0,0,0,0.5)';
+            modal.innerHTML =
+                '<div id="reports-modal-box" style="background:white; width:min(700px, calc(100vw - 40px)); ' +
+                'max-height:85vh; overflow-y:auto; margin:5vh auto; border-radius:10px; padding:16px 20px; ' +
+                'font-family:sans-serif; font-size:13px; color:#222; position:relative; box-sizing:border-box;">' +
+                '<button id="reports-modal-close" style="position:absolute; top:10px; right:12px; border:none; ' +
+                'background:none; font-size:20px; cursor:pointer; line-height:1;">✕</button>' +
+                '<div id="reports-modal-title" style="font-size:16px; font-weight:bold; margin:0 24px 10px 0;"></div>' +
+                '<div id="reports-modal-content"></div>' +
+                '</div>';
+            L.DomEvent.disableClickPropagation(modal);
+            L.DomEvent.disableScrollPropagation(modal);
+
+            const BACKEND_URL = "{{ this.backend_url }}";
+            const titleEl = document.getElementById("reports-modal-title");
+            const contentEl = document.getElementById("reports-modal-content");
+
+            function renderReport(label, report) {
+                titleEl.textContent = label;
+                if (!report || !report.themes || !report.themes.length) {
+                    contentEl.textContent = "Aucun rapport disponible pour le moment (le sous-agent n'a "
+                        + "peut-être pas encore tourné).";
+                    return;
+                }
+                const d = report.created_at ? new Date(report.created_at) : null;
+                const dateStr = d ? d.toLocaleString("fr-FR", {
+                    day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit"
+                }) : "";
+                contentEl.innerHTML =
+                    (dateStr ? '<div style="font-size:11px; color:#666; margin-bottom:10px;">Généré le ' + dateStr + '</div>' : '') +
+                    report.themes.map(function(t) {
+                        return '<div style="padding:8px 0; border-bottom:1px solid #eee;">' +
+                            '<div style="font-weight:bold; margin-bottom:4px;">🗂️ ' + (t.theme || "?") + '</div>' +
+                            '<div>' + (t.summary || "") + '</div>' +
+                            '</div>';
+                    }).join("");
+            }
+
+            function openReport(type, label) {
+                modal.style.display = 'block';
+                titleEl.textContent = label;
+                contentEl.textContent = "Chargement…";
+                fetch(BACKEND_URL + "?type=" + encodeURIComponent(type))
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) { renderReport(label, data.report); })
+                    .catch(function() {
+                        contentEl.textContent = "Service indisponible (le service Render peut mettre "
+                            + "30-60s à se réveiller s'il était endormi — réessayez).";
+                    });
+            }
+
+            document.getElementById("report-btn-hotspots").addEventListener("click", function() {
+                openReport("hotspots", "🌍 Points chauds de l'actualité mondiale");
+            });
+            document.getElementById("report-btn-financial").addEventListener("click", function() {
+                openReport("financial", "💰 Données financières internationales");
+            });
+            document.getElementById("reports-modal-close").addEventListener("click", function() {
+                modal.style.display = 'none';
+            });
+            modal.addEventListener("click", function(e) {
+                if (e.target === modal) modal.style.display = 'none';
+            });
+        })();
+        {% endmacro %}
+        """
+    )
+
+    def __init__(self, backend_url: str):
+        super().__init__()
+        self._name = "ReportsWidget"
+        self.backend_url = backend_url
+
+
 def _add_qa_widget(m: folium.Map) -> None:
     _QaWidget(QA_BACKEND_URL).add_to(m)
 
 
 def _add_joe_widget(m: folium.Map) -> None:
     _JoeWidget(JOE_BACKEND_URL).add_to(m)
+
+
+def _add_reports_widget(m: folium.Map) -> None:
+    _ReportsWidget(REPORTS_BACKEND_URL).add_to(m)
 
 
 def build_map(output_path: Path = OUTPUT_PATH) -> Path:
@@ -531,11 +672,14 @@ def build_map(output_path: Path = OUTPUT_PATH) -> Path:
     folium.LayerControl(collapsed=True).add_to(m)
     _add_qa_widget(m)
     _add_joe_widget(m)
+    _add_reports_widget(m)
     m.save(str(output_path))
     logger.info("build_map: carte générée -> %s", output_path)
     return output_path
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    from logging_config import configure_logging
+
+    configure_logging()
     build_map()

@@ -22,6 +22,8 @@ def run() -> int:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    from logging_config import configure_logging
+
+    configure_logging()
     n = run()
     print(f"{n} ligne(s) envoyée(s) vers official_statements")

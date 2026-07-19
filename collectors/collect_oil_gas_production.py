@@ -78,7 +78,9 @@ def run() -> tuple[int, int]:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    from logging_config import configure_logging
+
+    configure_logging()
     n_oil, n_gas = run()
     print(f"{n_oil} ligne(s) envoyée(s) vers oil_production")
     print(f"{n_gas} ligne(s) envoyée(s) vers gas_production")

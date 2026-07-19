@@ -47,6 +47,11 @@ MAX_INPUT_CHARS = 8000
 MAX_RETRIES = 3
 RETRY_FALLBACK_SECONDS = 20
 TRANSLATE_BATCH_SIZE = 20
+# Les rapports journaliers (generate_themed_report) agrègent des extraits de
+# PLUSIEURS tables sources en un seul appel Gemini (2 sous-agents dédiés, voir
+# collectors/collect_report_hotspots.py et collect_report_financial.py) — un
+# contexte bien plus large qu'un article individuel (MAX_INPUT_CHARS).
+REPORT_MAX_INPUT_CHARS = 25_000
 
 
 def _generate_with_retry(contents: str, response_mime_type: str | None = None):
@@ -311,6 +316,65 @@ def orchestrate_subagent_batch(name: str, pending: int, total: int, hard_cap: in
     except Exception as exc:
         logger.info("joe_agent: échec d'orchestration pour '%s' (%s), repli sur %d", name, exc, fallback)
         return fallback
+
+
+_REPORT_PROMPT_TEMPLATE = """Tu es Joe, un analyste de veille qui rédige un rapport journalier de synthèse pour le sujet suivant : {label}.
+
+Extraits collectés (une source par ligne, format "[table] texte") :
+\"\"\"
+{context}
+\"\"\"
+
+Rédige une synthèse organisée PAR THÈME : regroupe les extraits par thématique commune (ne fais surtout pas une liste plate, un thème doit rassembler plusieurs extraits liés quand c'est possible). Pour chaque thème identifié, donne :
+- "theme" : un titre de thème court (quelques mots, en français) ;
+- "summary" : une synthèse de plusieurs phrases (en français) des informations pertinentes à ce thème ;
+- "fiable" : un contrôle d'intégrité — true UNIQUEMENT si la synthèse se fonde STRICTEMENT sur les extraits fournis, sans rien inventer ni compléter avec des connaissances externes ; false si tu as dû déduire, extrapoler, ou si les extraits disponibles sont trop pauvres pour un thème donné.
+
+Réponds UNIQUEMENT avec un tableau JSON de cette forme exacte, sans texte autour :
+[{{"theme": "...", "summary": "...", "fiable": true|false}}]"""
+
+
+def generate_themed_report(label: str, context: str) -> list[dict] | None:
+    """
+    Demande à Joe une synthèse d'un rapport journalier, organisée par thème,
+    à partir d'un contexte texte déjà rassemblé par le sous-agent appelant
+    (voir collectors/collect_report_hotspots.py et collect_report_financial.py
+    — respectivement "points chauds de l'actualité mondiale" et "données
+    financières internationales et par pays", les 2 rapports demandés).
+
+    CONTRÔLE D'INTÉGRITÉ : même principe que analyze_homepages_batch — Joe
+    s'auto-évalue par thème dans le même appel ("fiable"), un thème jugé non
+    strictement fondé sur le contexte fourni est REJETÉ ici plutôt que stocké.
+
+    Retourne une liste de {"theme", "summary"}, ou None si la clé API est
+    absente, le contexte est vide, l'appel échoue, ou aucun thème ne survit au
+    contrôle d'intégrité.
+    """
+    if not config.GEMINI_API_KEY or not context:
+        return None
+    try:
+        response = _generate_with_retry(
+            _REPORT_PROMPT_TEMPLATE.format(label=label, context=context[:REPORT_MAX_INPUT_CHARS]),
+            response_mime_type="application/json",
+        )
+        data = json.loads(response.text)
+        if not isinstance(data, list):
+            return None
+        themes = []
+        rejected = 0
+        for item in data:
+            if not item.get("theme") or not item.get("summary"):
+                continue
+            if not item.get("fiable", False):
+                rejected += 1
+                continue
+            themes.append({"theme": item["theme"], "summary": item["summary"]})
+        if rejected:
+            logger.info("joe_agent: %d thème(s) rejeté(s) par le contrôle d'intégrité (fiable=false)", rejected)
+        return themes or None
+    except Exception as exc:
+        logger.info("joe_agent: échec de génération du rapport '%s' (%s)", label, exc)
+        return None
 
 
 def discover_country_sources(country_name: str) -> list[dict] | None:

@@ -58,6 +58,10 @@ FREQUENCIES_MINUTES = {
     # toutes les 8h donne 3 executions/jour.
     "agences_presses_contents": 8 * 60,
     "risk_score": 6 * 60,
+    # 2 sous-agents "rapport journalier" de Joe (voir demande utilisateur) :
+    # hotspots de l'actualité mondiale + données financières internationales.
+    "report_hotspots": 24 * 60,
+    "report_financial": 24 * 60,
     # Minerais (USGS) : pas de fréquence -> déclenchement manuel uniquement
     # (voir cli.py --minerals-refresh)
 }

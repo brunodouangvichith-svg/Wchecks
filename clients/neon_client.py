@@ -61,6 +61,7 @@ TABLE_COLUMNS = {
     "agences_presses_contents": [
         "name", "category", "country", "specialty", "website_url", "region", "content", "theme",
     ],
+    "daily_reports": ["report_type", "themes"],
 }
 
 # Colonnes formant la contrainte UNIQUE de chaque table (voir db/schema.sql).
@@ -91,6 +92,7 @@ TABLE_CONFLICT_KEYS = {
     "international_organizations_contents": ["website_url"],
     "agences_presses": ["name"],
     "agences_presses_contents": ["website_url"],
+    "daily_reports": ["report_type"],
 }
 
 # Champ utilisé pour trier "le plus récent d'abord" dans get_latest()/get_history().
@@ -121,6 +123,7 @@ ORDER_FIELD = {
     "international_organizations_contents": "created_at",
     "agences_presses": "created_at",
     "agences_presses_contents": "created_at",
+    "daily_reports": "created_at",
 }
 
 _pool: ConnectionPool | None = None

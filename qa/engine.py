@@ -144,6 +144,31 @@ def get_joe_articles(limit: int = 50, search: str | None = None) -> list[dict]:
     return articles
 
 
+def get_daily_report(report_type: str) -> dict | None:
+    """
+    Retourne le dernier rapport journalier généré par un sous-agent Joe (voir
+    collectors/collect_report_hotspots.py et collect_report_financial.py) :
+    {"report_type", "themes": [{"theme", "summary"}, ...], "created_at"}, ou
+    None si `report_type` est inconnu ou qu'aucun rapport n'a encore été généré
+    (ex. juste après un déploiement, avant le premier passage du sous-agent).
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT report_type, themes, created_at FROM daily_reports WHERE report_type = %s",
+                (report_type,),
+            )
+            row = cur.fetchone()
+    if not row:
+        return None
+    report_type, themes, created_at = row
+    return {
+        "report_type": report_type,
+        "themes": themes,
+        "created_at": created_at.isoformat() if created_at else None,
+    }
+
+
 def _find_country(question: str) -> tuple[str, str] | None:
     """Retourne (iso3, nom matché) du premier pays reconnu dans la question.
 
