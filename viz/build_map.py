@@ -536,7 +536,10 @@ class _ReportsWidget(MacroElement):
             var map = {{ this._parent.get_name() }};
             var container = L.DomUtil.create('div', 'reports-widget-control', map.getContainer());
             container.style.position = 'absolute';
-            container.style.top = '20px';
+            // bottom droite, PAS top droite : folium y place le controle de
+            // couches (LayerControl, meme replie/collapsed) au meme endroit,
+            // ce qui masquait ces 2 boutons derriere/sous son icone.
+            container.style.bottom = '20px';
             container.style.right = '10px';
             container.style.zIndex = 1000;
             container.style.display = 'flex';
