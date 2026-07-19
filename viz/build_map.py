@@ -536,10 +536,13 @@ class _ReportsWidget(MacroElement):
             var map = {{ this._parent.get_name() }};
             var container = L.DomUtil.create('div', 'reports-widget-control', map.getContainer());
             container.style.position = 'absolute';
-            // bottom droite, PAS top droite : folium y place le controle de
-            // couches (LayerControl, meme replie/collapsed) au meme endroit,
-            // ce qui masquait ces 2 boutons derriere/sous son icone.
-            container.style.bottom = '20px';
+            // top droite, décalé sous l'icône du LayerControl (repliée/collapsed,
+            // toujours en haut à droite) plutôt que juste en dessous d'elle —
+            // "bottom" plaçait les boutons au milieu de l'écran dans certains
+            // environnements (probablement la hauteur réelle du conteneur de
+            // carte, pas du viewport), alors que "top" (comme le panneau Joe,
+            // confirmé fonctionnel) est fiable.
+            container.style.top = '70px';
             container.style.right = '10px';
             container.style.zIndex = 1000;
             container.style.display = 'flex';
