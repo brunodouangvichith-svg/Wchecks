@@ -213,11 +213,12 @@ def translate_batch(texts: list[str | None]) -> list[str | None]:
 
 _HOMEPAGE_BATCH_PROMPT_TEMPLATE = """Voici des extraits de la page d'accueil de plusieurs journaux, numérotés. Pour CHACUN, donne :
 - un court résumé (2-3 phrases, en français) de l'actualité mise en avant sur cette page ;
-- un thème principal (quelques mots, libre, ex. "politique intérieure", "conflit international", "économie").
+- un thème principal (quelques mots, libre, ex. "politique intérieure", "conflit international", "économie") ;
+- un contrôle d'intégrité : "fiable": true UNIQUEMENT si ton résumé se fonde STRICTEMENT sur des informations présentes dans l'extrait fourni, sans rien inventer ni ajouter qui n'y figure pas ; "fiable": false si tu as dû déduire, extrapoler, ou si l'extrait est trop pauvre/confus pour un résumé fiable.
 
 {numbered}
 
-Réponds UNIQUEMENT avec un objet JSON associant chaque numéro (en chaîne) à un objet {{"content": "...", "theme": "..."}}, sans commentaire ni texte autour."""
+Réponds UNIQUEMENT avec un objet JSON associant chaque numéro (en chaîne) à un objet {{"content": "...", "theme": "...", "fiable": true|false}}, sans commentaire ni texte autour."""
 
 
 def analyze_homepages_batch(texts: list[str | None]) -> list[dict | None]:
@@ -228,16 +229,25 @@ def analyze_homepages_batch(texts: list[str | None]) -> list[dict | None]:
     à 15 requêtes/minute, un appel par journal serait inutilement lent pour
     ~30 journaux traités une fois par jour.
 
+    CONTRÔLE D'INTÉGRITÉ : Joe s'auto-évalue dans le même appel ("fiable",
+    voir _HOMEPAGE_BATCH_PROMPT_TEMPLATE) — un résultat marqué "fiable": false
+    (résumé jugé par Joe lui-même comme non strictement fondé sur le texte
+    fourni) est REJETÉ ici et traité comme un échec d'analyse, jamais stocké.
+    Pas un second appel Gemini séparé (doublerait le coût, déjà contraint par
+    le plafond quotidien) : l'auto-évaluation fait partie de la même requête
+    que la production du résumé.
+
     Retourne une liste de MÊME LONGUEUR que `texts` (alignée par position) :
-    {"content", "theme"} pour chaque texte non vide analysé avec succès, ou
-    None si ce texte était vide, la clé API est absente, ou le lot
-    correspondant a échoué.
+    {"content", "theme"} pour chaque texte non vide, analysé avec succès ET
+    jugé fiable par Joe, ou None si ce texte était vide, la clé API est
+    absente, le lot a échoué, ou l'auto-évaluation a rejeté le résultat.
     """
     results: list[dict | None] = [None] * len(texts)
     if not config.GEMINI_API_KEY:
         return results
 
     indexed_non_empty = [(i, t) for i, t in enumerate(texts) if t]
+    rejected = 0
     for batch_start in range(0, len(indexed_non_empty), TRANSLATE_BATCH_SIZE):
         batch = indexed_non_empty[batch_start : batch_start + TRANSLATE_BATCH_SIZE]
         numbered = "\n\n".join(f"{n}: {t[:2000]}" for n, (_, t) in enumerate(batch))
@@ -247,13 +257,60 @@ def analyze_homepages_batch(texts: list[str | None]) -> list[dict | None]:
             data = json.loads(response.text)
             for n, (original_index, _) in enumerate(batch):
                 item = data.get(str(n))
-                if item and item.get("content"):
-                    results[original_index] = {"content": item.get("content"), "theme": item.get("theme")}
+                if not item or not item.get("content"):
+                    continue
+                if not item.get("fiable", False):
+                    rejected += 1
+                    continue
+                results[original_index] = {"content": item.get("content"), "theme": item.get("theme")}
         except Exception as exc:
             logger.info(
                 "joe_agent: échec d'analyse de pages d'accueil (lot de %d) (%s)", len(batch), exc
             )
+    if rejected:
+        logger.info("joe_agent: %d résultat(s) rejeté(s) par le contrôle d'intégrité (fiable=false)", rejected)
     return results
+
+
+_ORCHESTRATE_PROMPT_TEMPLATE = """Tu es le "chef d'orchestre" d'un sous-agent de veille qui scrape et résume des pages d'accueil de sites web.
+
+Sous-agent : "{name}"
+Éléments en attente d'analyse (jamais encore traités, ou dont le contenu est le plus ancien) : {pending}
+Total d'éléments suivis par ce sous-agent : {total}
+Plafond dur pour cette exécution (ne jamais dépasser) : {hard_cap}
+
+Décide combien d'éléments ce sous-agent doit traiter lors de cette exécution, en autonomie (aucune supervision humaine) : privilégie un traitement complet si le nombre en attente est raisonnable, mais reste prudent si le volume est important pour ne pas monopoliser le quota Gemini partagé avec les autres sous-agents.
+
+Réponds UNIQUEMENT avec un objet JSON {{"batch_size": <entier>}}, sans commentaire ni texte autour."""
+
+
+def orchestrate_subagent_batch(name: str, pending: int, total: int, hard_cap: int) -> int:
+    """
+    Joe, en "chef d'orchestre", décide de manière autonome combien d'éléments
+    le sous-agent `name` doit traiter lors de cette exécution — plutôt qu'une
+    règle fixe codée en dur, un appel Gemini léger arbitre le compromis entre
+    "tout traiter tant que c'est raisonnable" et "ne pas épuiser le quota
+    quotidien partagé avec les autres sous-agents" (voir _generate_with_retry).
+
+    Repli tolérant : si la clé API est absente, l'appel échoue, ou la réponse
+    est inexploitable, retourne simplement `min(pending, hard_cap)` — le
+    sous-agent continue de fonctionner (avec une règle simple) plutôt que de
+    bloquer sur l'échec d'une décision d'orchestration.
+    """
+    fallback = min(pending, hard_cap)
+    if not config.GEMINI_API_KEY or pending <= 0:
+        return fallback
+    try:
+        response = _generate_with_retry(
+            _ORCHESTRATE_PROMPT_TEMPLATE.format(name=name, pending=pending, total=total, hard_cap=hard_cap),
+            response_mime_type="application/json",
+        )
+        data = json.loads(response.text)
+        batch_size = int(data.get("batch_size", fallback))
+        return max(0, min(batch_size, hard_cap, pending))
+    except Exception as exc:
+        logger.info("joe_agent: échec d'orchestration pour '%s' (%s), repli sur %d", name, exc, fallback)
+        return fallback
 
 
 def discover_country_sources(country_name: str) -> list[dict] | None:
