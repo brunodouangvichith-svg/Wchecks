@@ -457,11 +457,22 @@ class _JoeWidget(MacroElement):
             const list = document.getElementById("joe-list");
             const searchInput = document.getElementById("joe-search");
 
+            // Fenêtre de "fraîcheur" : une fiche (journal/organisation/agence de
+            // presse) dont updated_at tombe dans cette fenêtre vient d'être
+            // rafraîchie par un sous-agent de Joe en tâche de fond (voir
+            // collectors/_joe_subagent.py) — mise en avant visuellement le
+            // temps qu'elle reste "fraîche", pas une durée arbitraire au sens
+            // strict : ~2h laisse le temps de la remarquer entre deux passages
+            // sur la carte, sans rester allumée jusqu'au prochain cycle (le
+            // plus court des 3 sous-agents tourne toutes les 8h).
+            const HIGHLIGHT_WINDOW_MS = 2 * 60 * 60 * 1000;
+
             function renderArticles(articles) {
                 if (!articles.length) {
                     list.textContent = "Aucun article trouvé.";
                     return;
                 }
+                const now = Date.now();
                 list.innerHTML = articles.map(function(a) {
                     const d = a.date ? new Date(a.date) : null;
                     const dateStr = d ? d.toLocaleString("fr-FR", {
@@ -473,8 +484,15 @@ class _JoeWidget(MacroElement):
                     const theme = a.categorie || "?";
                     const resume = a.resume || "(pas de résumé)";
                     const link = a.url ? '<a href="' + a.url + '" target="_blank" style="font-size:11px;">source</a>' : "";
-                    return '<div style="padding:8px 0; border-bottom:1px solid #eee;">' +
-                        '<div style="font-size:11px; color:#666;">' + dateStr + ' · ' + pays + ' · ' + source + '</div>' +
+                    const justRefreshed = a.updated_at && (now - new Date(a.updated_at).getTime()) < HIGHLIGHT_WINDOW_MS;
+                    const rowStyle = justRefreshed
+                        ? 'padding:8px; margin:2px 0; border-radius:6px; background:#fff8d6; border:1px solid #f0d878;'
+                        : 'padding:8px 0; border-bottom:1px solid #eee;';
+                    const badge = justRefreshed
+                        ? ' <span style="background:#f0c419; color:#5a4600; border-radius:4px; padding:1px 5px; font-size:10px;">🔄 rafraîchi</span>'
+                        : '';
+                    return '<div style="' + rowStyle + '">' +
+                        '<div style="font-size:11px; color:#666;">' + dateStr + ' · ' + pays + ' · ' + source + badge + '</div>' +
                         '<div style="font-size:11px; font-weight:bold; margin-top:2px;">🤖 ' + theme + '</div>' +
                         '<div style="margin-top:2px;">' + resume + '</div>' +
                         '<div style="margin-top:2px;">' + link + '</div>' +

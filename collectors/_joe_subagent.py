@@ -15,6 +15,8 @@ factorise uniquement la logique commune (lire l'annuaire, prioriser les
 volume par Joe, analyser par lots, enregistrer), pas le planning.
 """
 
+from datetime import datetime, timezone
+
 from clients.article_scraper import verify_and_extract
 from clients.joe_agent import analyze_homepages_batch, orchestrate_subagent_batch
 from clients.neon_client import get_connection, upsert_generic
@@ -31,9 +33,9 @@ def run_subagent(name: str, directory_table: str, contents_table: str, directory
     Exécute un cycle complet du sous-agent `name` :
     1. lit `directory_columns` (dont le dernier doit être `website_url`) depuis
        `directory_table` ;
-    2. priorise les entrées de `contents_table` jamais traitées, puis les plus
-       anciennes (LEFT JOIN sur website_url, ORDER BY created_at le plus
-       ancien/absent en premier) ;
+    2. priorise les entrées de `contents_table` jamais traitées, puis les moins
+       récemment rafraîchies (LEFT JOIN sur website_url, ORDER BY updated_at le
+       plus ancien/absent en premier) ;
     3. demande à Joe (orchestrate_subagent_batch) combien traiter cette fois ;
     4. scrape (clients.article_scraper) puis analyse par lots
        (clients.joe_agent.analyze_homepages_batch, intègre le contrôle
@@ -57,7 +59,7 @@ def run_subagent(name: str, directory_table: str, contents_table: str, directory
                 SELECT {select_cols}
                 FROM {directory_table} d
                 LEFT JOIN {contents_table} c ON c.website_url = d.website_url
-                ORDER BY c.created_at ASC NULLS FIRST
+                ORDER BY c.updated_at ASC NULLS FIRST
                 """
             )
             entries = cur.fetchall()
@@ -80,6 +82,7 @@ def run_subagent(name: str, directory_table: str, contents_table: str, directory
 
     analyses = analyze_homepages_batch(texts)
 
+    refreshed_at = datetime.now(timezone.utc).isoformat()
     rows = []
     for entry, analysis in zip(entries, analyses):
         if not analysis:
@@ -87,6 +90,11 @@ def run_subagent(name: str, directory_table: str, contents_table: str, directory
         row = dict(zip(directory_columns, entry))
         row["content"] = analysis["content"]
         row["theme"] = analysis["theme"]
+        # updated_at : horodatage explicite de CE rafraîchissement (distinct de
+        # created_at, jamais réécrit par upsert_generic) — permet au panneau
+        # "Articles analysés par Joe" de mettre en avant les fiches tout juste
+        # rafraîchies (voir qa.engine.get_joe_articles).
+        row["updated_at"] = refreshed_at
         rows.append(row)
 
     logger.info("%s : %d/%d élément(s) analysé(s) avec succès (intégrité vérifiée)", name, len(rows), len(entries))

@@ -89,15 +89,22 @@ def get_joe_articles(limit: int = 50, search: str | None = None) -> list[dict]:
 
     Ne couvre qu'un sous-ensemble des articles collectés : Joe est
     volontairement borné par cycle (coût API, voir config.JOE_MAX_ARTICLES_PER_RUN).
+
+    Chaque fiche de référence (_JOE_REFERENCE_TABLES) porte aussi `updated_at`
+    (NULL pour les événements de _JOE_SOURCE_TABLES, qui n'ont pas ce concept de
+    rafraîchissement) — le panneau de la carte s'en sert pour "highlighter" les
+    fiches tout juste rafraîchies par un sous-agent de Joe.
     """
     event_selects = [
-        f"SELECT s.date, s.{pays_col} AS pays, s.url, j.categorie, j.gravite, j.resume_ia, j.acteurs "
+        f"SELECT s.date, s.{pays_col} AS pays, s.url, j.categorie, j.gravite, j.resume_ia, j.acteurs, "
+        f"NULL::timestamptz AS updated_at "
         f"FROM {table} s JOIN joe_analysis j ON j.source_table = '{table}' AND j.url = s.url"
         for table, pays_col in _JOE_SOURCE_TABLES
     ]
     reference_selects = [
         f"SELECT created_at AS date, {pays_col} AS pays, website_url AS url, theme AS categorie, "
-        f"NULL AS gravite, content AS resume_ia, NULL AS acteurs FROM {table} WHERE content IS NOT NULL"
+        f"NULL AS gravite, content AS resume_ia, NULL AS acteurs, updated_at "
+        f"FROM {table} WHERE content IS NOT NULL"
         for table, pays_col in _JOE_REFERENCE_TABLES
     ]
     base_query = " UNION ALL ".join(event_selects + reference_selects)
@@ -111,7 +118,7 @@ def get_joe_articles(limit: int = 50, search: str | None = None) -> list[dict]:
         )
         params = [pattern, pattern, pattern, pattern]
     query = (
-        f"SELECT date, pays, url, categorie, gravite, resume_ia FROM ({base_query}) combined "
+        f"SELECT date, pays, url, categorie, gravite, resume_ia, updated_at FROM ({base_query}) combined "
         f"{where_clause}ORDER BY date DESC NULLS LAST LIMIT %s"
     )
     params.append(limit)
@@ -122,7 +129,7 @@ def get_joe_articles(limit: int = 50, search: str | None = None) -> list[dict]:
             rows = cur.fetchall()
 
     articles = []
-    for date, pays, url, categorie, gravite, resume in rows:
+    for date, pays, url, categorie, gravite, resume, updated_at in rows:
         domain = urlparse(url).netloc.removeprefix("www.") if url else None
         # Repli sur l'extension de domaine (voir mapping.country_mapping.TLD_TO_ISO3)
         # quand le pays est inconnu — arrive pour les événements GDELT dont le
@@ -139,6 +146,7 @@ def get_joe_articles(limit: int = 50, search: str | None = None) -> list[dict]:
                 "gravite": gravite,
                 "resume": resume,
                 "url": url,
+                "updated_at": updated_at.isoformat() if updated_at else None,
             }
         )
     return articles

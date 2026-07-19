@@ -52,14 +52,16 @@ TABLE_COLUMNS = {
     "country_sources": ["pays_code", "nom_source", "type_source", "url", "feed_url"],
     "country_news": ["pays_code", "source_nom", "url", "date", "titre", "resume", "source_verifiee"],
     "national_newspapers": ["name", "country", "region", "language", "website_url", "political_leaning"],
-    "national_newspapers_contents": ["name", "country", "region", "language", "website_url", "content", "theme"],
+    "national_newspapers_contents": [
+        "name", "country", "region", "language", "website_url", "content", "theme", "updated_at",
+    ],
     "international_organizations": ["name", "category", "role", "key_resources", "website_url", "region"],
     "international_organizations_contents": [
-        "name", "category", "role", "key_resources", "website_url", "region", "content", "theme",
+        "name", "category", "role", "key_resources", "website_url", "region", "content", "theme", "updated_at",
     ],
     "agences_presses": ["name", "category", "country", "specialty", "website_url", "region"],
     "agences_presses_contents": [
-        "name", "category", "country", "specialty", "website_url", "region", "content", "theme",
+        "name", "category", "country", "specialty", "website_url", "region", "content", "theme", "updated_at",
     ],
     "daily_reports": ["report_type", "themes"],
 }

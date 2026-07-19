@@ -304,6 +304,12 @@ CREATE TABLE IF NOT EXISTS national_newspapers_contents (
     content TEXT,
     theme TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- updated_at : contrairement à created_at (fixé au premier scraping,
+    -- jamais réécrit), remis à jour à CHAQUE rafraîchissement par le
+    -- sous-agent (voir collectors/_joe_subagent.py) — permet au panneau
+    -- "Articles analysés par Joe" (viz/build_map.py) de "highlighter" les
+    -- fiches fraîchement rafraîchies.
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (website_url)
 );
 
@@ -342,6 +348,7 @@ CREATE TABLE IF NOT EXISTS international_organizations_contents (
     content TEXT,
     theme TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (website_url)
 );
 
@@ -377,6 +384,7 @@ CREATE TABLE IF NOT EXISTS agences_presses_contents (
     content TEXT,
     theme TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (website_url)
 );
 
@@ -392,3 +400,12 @@ CREATE TABLE IF NOT EXISTS daily_reports (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (report_type)
 );
+
+-- Migration : `updated_at` a été ajouté aux 3 tables de contenu de référence
+-- APRÈS leur création initiale — `CREATE TABLE IF NOT EXISTS` ci-dessus ne
+-- modifie pas une table déjà existante, d'où ces ALTER TABLE explicites
+-- (idempotents via IF NOT EXISTS) pour que ré-appliquer ce fichier sur une
+-- base Neon déjà peuplée ajoute bien la colonne.
+ALTER TABLE national_newspapers_contents ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE international_organizations_contents ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE agences_presses_contents ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
