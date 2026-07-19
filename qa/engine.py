@@ -10,12 +10,44 @@ réponse plausible.
 """
 
 import logging
+import re
 from urllib.parse import urlparse
 
+from clients.gdelt_client import ZONE_KEYWORDS
 from clients.neon_client import get_connection
 from mapping.country_mapping import COUNTRY_NAME_TO_ISO3, country_from_domain
 
 logger = logging.getLogger(__name__)
+
+# Déclenche une recherche libre "Joe check" (voir _handle_joe_check) plutôt que
+# le dispatch habituel pays/dimension — ex. "Joe peux-tu checker le conflit au
+# détroit d'Ormuz ?". Vérifié AVANT la recherche de pays dans answer_question().
+JOE_CHECK_KEYWORDS = ["check", "checker", "vérifie", "verifie", "vérifier", "verifier"]
+
+# Sources interrogées par _handle_joe_check : (table, colonne pays, colonne
+# titre, colonne texte, colonne url, colonne date) — mélange volontairement les
+# événements bruts GDELT (titre/resume) et les fiches de référence rafraîchies
+# par les sous-agents de Joe (name/content), pas seulement le sous-ensemble
+# déjà analysé par joe_analysis : "Joe organise ses agents" pour croiser TOUTES
+# les sources qu'il a rassemblées sur le sujet, pas une nouvelle recherche web
+# en direct.
+_JOE_CHECK_SOURCES = [
+    ("energy_conflicts", "pays", "titre", "resume", "url", "date"),
+    ("social_tensions", "pays", "titre", "resume", "url", "date"),
+    ("military_activity", "pays", "titre", "resume", "url", "date"),
+    ("country_news", "pays_code", "titre", "resume", "url", "date"),
+    ("national_newspapers_contents", "country", "name", "content", "website_url", "created_at"),
+    ("international_organizations_contents", "region", "name", "content", "website_url", "created_at"),
+    ("agences_presses_contents", "country", "name", "content", "website_url", "created_at"),
+]
+
+# Mots à ignorer lors de l'extraction du sujet en repli (voir
+# _handle_joe_check) — le déclencheur lui-même et le bruit grammatical
+# français courant, pas une liste exhaustive.
+_JOE_CHECK_NOISE_WORDS = {
+    "joe", *JOE_CHECK_KEYWORDS, "peux", "tu", "pourrais", "le", "la", "les", "un", "une",
+    "au", "aux", "du", "de", "des", "sur", "sur les", "l", "d", "et", "à", "a",
+}
 
 # (table, colonne représentant le "pays" pour l'affichage) — official_statements
 # n'a pas de colonne pays, l'institution en tient lieu (ONU, Commission
@@ -123,6 +155,78 @@ def _find_country(question: str) -> tuple[str, str] | None:
         if name.lower() in q_lower:
             return iso3, name
     return None
+
+
+def _extract_check_topic(question: str) -> list[str]:
+    """
+    Détermine les mots-clés de recherche pour une requête "Joe check" (voir
+    _handle_joe_check). Cherche d'abord une zone stratégique connue
+    (ZONE_KEYWORDS, ex. "Ormuz"/"Hormuz") sur la question ENTIÈRE — plus fiable
+    qu'une extraction de sujet, gère nativement le bilingue. À défaut, retombe
+    sur les mots significatifs de la question, hors bruit grammatical/déclencheur
+    (_JOE_CHECK_NOISE_WORDS).
+    """
+    q_lower = question.lower()
+    for keywords in ZONE_KEYWORDS.values():
+        if any(kw in q_lower for kw in keywords):
+            return keywords
+
+    words = re.findall(r"\w+", q_lower)
+    return [w for w in words if w not in _JOE_CHECK_NOISE_WORDS and len(w) > 2]
+
+
+def _handle_joe_check(question: str, limit: int = 8) -> str:
+    """
+    Recherche libre déclenchée par "Joe check/vérifie ..." (voir
+    JOE_CHECK_KEYWORDS) : Joe "organise ses agents" en interrogeant toutes ses
+    sources déjà collectées (conflits/tensions/activité militaire GDELT,
+    actualité nationale, organisations internationales, agences de presse) sur
+    le sujet mentionné — PAS une nouvelle recherche web en direct, une synthèse
+    de ce que Joe a déjà rassemblé.
+    """
+    keywords = _extract_check_topic(question)
+    if not keywords:
+        return "Je n'ai pas trouvé de mot-clé exploitable dans votre question."
+
+    selects = []
+    params: list = []
+    for table, pays_col, title_col, text_col, url_col, date_col in _JOE_CHECK_SOURCES:
+        or_clauses = []
+        for kw in keywords:
+            pattern = f"%{kw}%"
+            or_clauses.append(f"{title_col} ILIKE %s")
+            params.append(pattern)
+            or_clauses.append(f"{text_col} ILIKE %s")
+            params.append(pattern)
+        selects.append(
+            f"SELECT {date_col} AS date, {pays_col} AS pays, {title_col} AS titre, "
+            f"{text_col} AS resume, {url_col} AS url, '{table}' AS source_table "
+            f"FROM {table} WHERE {' OR '.join(or_clauses)}"
+        )
+    query = " UNION ALL ".join(selects) + " ORDER BY date DESC NULLS LAST LIMIT %s"
+    params.append(limit)
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, params)
+            rows = cur.fetchall()
+
+    if not rows:
+        return (
+            f"Aucune information trouvée sur « {' '.join(keywords)} » dans les données "
+            "déjà collectées par Joe (conflits GDELT, actualité nationale, organisations "
+            "internationales, agences de presse)."
+        )
+
+    lines = [
+        f"[{source_table}, {date.strftime('%d/%m/%Y') if date else 'date inconnue'}] "
+        f"{titre or '(sans titre)'} — {(resume or '')[:200]} ({url})"
+        for date, pays, titre, resume, url, source_table in rows
+    ]
+    return (
+        f"Voici ce que Joe a trouvé en croisant ses sources sur « {' '.join(keywords)} » :\n- "
+        + "\n- ".join(lines)
+    )
 
 
 def _handle_debt(cur, iso3: str) -> str | None:
@@ -355,8 +459,14 @@ def answer_question(question: str) -> str:
     """
     Répond à une question en langage naturel simple à partir des données Neon.
 
+    "Joe check/vérifie ..." (JOE_CHECK_KEYWORDS) a la PRIORITÉ ABSOLUE, vérifié
+    avant même la recherche de pays : déclenche une recherche libre sur le
+    sujet mentionné à travers toutes les sources déjà rassemblées par Joe (voir
+    _handle_joe_check), pour des requêtes du type "Joe peux-tu checker le
+    conflit au détroit d'Ormuz ?" qui ne portent pas forcément sur un pays.
+
     Un PAYS reconnu dans la question (nom français/anglais, via
-    mapping.country_mapping) a toujours priorité : combiné à un mot-clé de
+    mapping.country_mapping) a ensuite priorité : combiné à un mot-clé de
     dimension (dette, économie, défense, industrie, risque, conflits), ou, si
     aucune dimension précise n'est reconnue, un aperçu combiné par pays (économie +
     dette + risque) — c'est la "synthèse par pays". Un mot-clé de conflit
@@ -370,6 +480,10 @@ def answer_question(question: str) -> str:
     une réponse.
     """
     q_lower = question.lower()
+
+    if "joe" in q_lower and any(kw in q_lower for kw in JOE_CHECK_KEYWORDS):
+        return _handle_joe_check(question)
+
     country_match = _find_country(question)
 
     if country_match is None:
