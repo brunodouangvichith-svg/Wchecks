@@ -654,6 +654,92 @@ class _ReportsWidget(MacroElement):
         self.backend_url = backend_url
 
 
+class _HotspotsPopupWidget(MacroElement):
+    """
+    Popup flottant affiché AUTOMATIQUEMENT au chargement de la carte (pas
+    besoin de cliquer sur le bouton "🌍 Rapport hotspots"), centré par-dessus
+    la carte — réutilise le MÊME rapport déjà généré par le sous-agent
+    collectors/collect_report_hotspots.py (endpoint /daily-report?type=hotspots,
+    voir _ReportsWidget) : pas de nouvel agent ni de coût Gemini
+    supplémentaire, uniquement une présentation différente (auto-affiché,
+    fermable, plutôt que sur demande).
+    """
+
+    _template = Template(
+        """
+        {% macro script(this, kwargs) %}
+        (function() {
+            var map = {{ this._parent.get_name() }};
+            var popup = L.DomUtil.create('div', 'hotspots-popup', map.getContainer());
+            popup.style.position = 'absolute';
+            popup.style.top = '50%';
+            popup.style.left = '50%';
+            popup.style.transform = 'translate(-50%, -50%)';
+            popup.style.zIndex = 1500;
+            popup.style.background = 'white';
+            popup.style.width = 'min(560px, calc(100vw - 40px))';
+            popup.style.maxHeight = '75vh';
+            popup.style.overflowY = 'auto';
+            popup.style.borderRadius = '10px';
+            popup.style.boxShadow = '0 4px 24px rgba(0,0,0,0.45)';
+            popup.style.padding = '16px 20px';
+            popup.style.fontFamily = 'sans-serif';
+            popup.style.fontSize = '13px';
+            popup.style.color = '#222';
+            popup.style.boxSizing = 'border-box';
+            popup.innerHTML =
+                '<button id="hotspots-popup-close" style="position:absolute; top:10px; right:12px; border:none; ' +
+                'background:none; font-size:20px; cursor:pointer; line-height:1;">✕</button>' +
+                '<div style="font-size:16px; font-weight:bold; margin:0 24px 10px 0;">' +
+                '🌍 Les points chauds de l\\'actualité pour aujourd\\'hui</div>' +
+                '<div id="hotspots-popup-content">Chargement…</div>';
+            L.DomEvent.disableClickPropagation(popup);
+            L.DomEvent.disableScrollPropagation(popup);
+
+            const BACKEND_URL = "{{ this.backend_url }}";
+            const contentEl = document.getElementById("hotspots-popup-content");
+
+            document.getElementById("hotspots-popup-close").addEventListener("click", function() {
+                popup.style.display = 'none';
+            });
+
+            fetch(BACKEND_URL + "?type=hotspots")
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    const report = data.report;
+                    if (!report || !report.themes || !report.themes.length) {
+                        contentEl.textContent = "Aucun rapport disponible pour le moment (le sous-agent n'a "
+                            + "peut-être pas encore tourné).";
+                        return;
+                    }
+                    const d = report.created_at ? new Date(report.created_at) : null;
+                    const dateStr = d ? d.toLocaleString("fr-FR", {
+                        day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit"
+                    }) : "";
+                    contentEl.innerHTML =
+                        (dateStr ? '<div style="font-size:11px; color:#666; margin-bottom:10px;">Généré le ' + dateStr + '</div>' : '') +
+                        report.themes.map(function(t) {
+                            return '<div style="padding:8px 0; border-bottom:1px solid #eee;">' +
+                                '<div style="font-weight:bold; margin-bottom:4px;">🗂️ ' + (t.theme || "?") + '</div>' +
+                                '<div>' + (t.summary || "") + '</div>' +
+                                '</div>';
+                        }).join("");
+                })
+                .catch(function() {
+                    contentEl.textContent = "Service indisponible (le service Render peut mettre "
+                        + "30-60s à se réveiller s'il était endormi — réessayez).";
+                });
+        })();
+        {% endmacro %}
+        """
+    )
+
+    def __init__(self, backend_url: str):
+        super().__init__()
+        self._name = "HotspotsPopupWidget"
+        self.backend_url = backend_url
+
+
 def _add_qa_widget(m: folium.Map) -> None:
     _QaWidget(QA_BACKEND_URL).add_to(m)
 
@@ -664,6 +750,10 @@ def _add_joe_widget(m: folium.Map) -> None:
 
 def _add_reports_widget(m: folium.Map) -> None:
     _ReportsWidget(REPORTS_BACKEND_URL).add_to(m)
+
+
+def _add_hotspots_popup_widget(m: folium.Map) -> None:
+    _HotspotsPopupWidget(REPORTS_BACKEND_URL).add_to(m)
 
 
 def build_map(output_path: Path = OUTPUT_PATH) -> Path:
@@ -697,6 +787,7 @@ def build_map(output_path: Path = OUTPUT_PATH) -> Path:
     _add_qa_widget(m)
     _add_joe_widget(m)
     _add_reports_widget(m)
+    _add_hotspots_popup_widget(m)
     m.save(str(output_path))
     logger.info("build_map: carte générée -> %s", output_path)
     return output_path
