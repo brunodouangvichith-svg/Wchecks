@@ -15,6 +15,14 @@ logger = logging.getLogger(__name__)
 
 _DIRECTORY_COLUMNS = ["name", "country", "region", "language", "website_url"]
 
+# Pays traités par leur propre sous-agent dédié (voir
+# collectors/collect_newspapers_<pays>.py) — exclus ici pour ne pas être
+# scrapés/analysés deux fois (double coût Gemini sur le quota quotidien
+# partagé). Ces pays restent dans national_newspapers pour l'annuaire.
+_EXCLUDED_COUNTRIES = [
+    "Angola", "Azerbaïdjan", "Grèce", "Libye", "Norvège", "Soudan", "Syrie", "Venezuela", "Yémen",
+]
+
 
 def run() -> int:
     return run_subagent(
@@ -22,6 +30,8 @@ def run() -> int:
         directory_table="national_newspapers",
         contents_table="national_newspapers_contents",
         directory_columns=_DIRECTORY_COLUMNS,
+        exclude_column="country",
+        exclude_values=_EXCLUDED_COUNTRIES,
     )
 
 

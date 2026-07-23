@@ -57,6 +57,10 @@ FREQUENCIES_MINUTES = {
     # agences_presses_contents : "2 ou 3 fois par jour" (voir demande) -
     # toutes les 8h donne 3 executions/jour.
     "agences_presses_contents": 8 * 60,
+    # 9 sous-agents dedies par pays (voir collectors/collect_newspapers_*.py) -
+    # meme cadence que le sous-agent generique national_newspapers_contents
+    # qu'ils remplacent pour ces pays.
+    "newspapers_country_dedicated": 24 * 60,
     "risk_score": 6 * 60,
     # 2 sous-agents "rapport journalier" de Joe (voir demande utilisateur) :
     # hotspots de l'actualité mondiale + données financières internationales.

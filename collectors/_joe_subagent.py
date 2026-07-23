@@ -28,11 +28,21 @@ from logging_config import get_subagent_logger
 HARD_CAP_PER_RUN = 40
 
 
-def run_subagent(name: str, directory_table: str, contents_table: str, directory_columns: list[str]) -> int:
+def run_subagent(
+    name: str,
+    directory_table: str,
+    contents_table: str,
+    directory_columns: list[str],
+    exclude_column: str | None = None,
+    exclude_values: list[str] | None = None,
+) -> int:
     """
     Exécute un cycle complet du sous-agent `name` :
     1. lit `directory_columns` (dont le dernier doit être `website_url`) depuis
-       `directory_table` ;
+       `directory_table`, en excluant `exclude_values` sur `exclude_column` si
+       fournis (voir collect_national_newspapers_contents.py : les pays dotés
+       d'un sous-agent dédié, collect_newspapers_<pays>.py, sont exclus ici
+       pour ne pas être traités deux fois) ;
     2. priorise les entrées de `contents_table` jamais traitées, puis les moins
        récemment rafraîchies (LEFT JOIN sur website_url, ORDER BY updated_at le
        plus ancien/absent en premier) ;
@@ -51,6 +61,11 @@ def run_subagent(name: str, directory_table: str, contents_table: str, directory
     # de colonne — pas de correspondance à établir, `directory_columns` la
     # contient déjà telle quelle.
     select_cols = ", ".join(f"d.{col}" for col in directory_columns)
+    where_clause = ""
+    params: tuple = ()
+    if exclude_column and exclude_values:
+        where_clause = f"WHERE d.{exclude_column} NOT IN ({', '.join(['%s'] * len(exclude_values))})"
+        params = tuple(exclude_values)
 
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -59,11 +74,14 @@ def run_subagent(name: str, directory_table: str, contents_table: str, directory
                 SELECT {select_cols}
                 FROM {directory_table} d
                 LEFT JOIN {contents_table} c ON c.website_url = d.website_url
+                {where_clause}
                 ORDER BY c.updated_at ASC NULLS FIRST
-                """
+                """,
+                params,
             )
             entries = cur.fetchall()
-            cur.execute(f"SELECT COUNT(*) FROM {directory_table}")
+            count_where = f"WHERE {exclude_column} NOT IN ({', '.join(['%s'] * len(exclude_values))})" if where_clause else ""
+            cur.execute(f"SELECT COUNT(*) FROM {directory_table} {count_where}", params)
             total = cur.fetchone()[0]
 
     pending = len(entries)

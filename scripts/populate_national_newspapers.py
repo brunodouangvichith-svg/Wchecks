@@ -124,6 +124,38 @@ NEWSPAPERS = [
     {"name": "Dawn", "country": "Pakistan", "region": "Asie",
      "language": "anglais", "website_url": "https://www.dawn.com",
      "political_leaning": "indépendant"},
+
+    # --- 9 pays ajoutés depuis data/whitelist/whitelist_journaux.md, chacun
+    # traité par son propre sous-agent dédié (voir collectors/collect_newspapers_*.py)
+    # plutôt que par le sous-agent générique — présents ici pour l'annuaire/
+    # affichage uniquement (voir _EXCLUDED_COUNTRIES dans _joe_subagent.py).
+    {"name": "Jornal de Angola", "country": "Angola", "region": "Afrique",
+     "language": "portugais", "website_url": "https://www.jornaldeangola.ao",
+     "political_leaning": "officiel (gouvernemental)"},
+    {"name": "Azernews", "country": "Azerbaïdjan", "region": "Europe de l'Est, Russie & Asie Centrale",
+     "language": "anglais", "website_url": "https://www.azernews.az",
+     "political_leaning": "semi-officiel"},
+    {"name": "Kathimerini", "country": "Grèce", "region": "Europe & UK",
+     "language": "grec", "website_url": "https://www.kathimerini.gr",
+     "political_leaning": "centre-droit"},
+    {"name": "Libya Observer", "country": "Libye", "region": "Afrique",
+     "language": "anglais", "website_url": "https://www.libyaobserver.ly",
+     "political_leaning": "indépendant"},
+    {"name": "Aftenposten", "country": "Norvège", "region": "Europe & UK",
+     "language": "norvégien", "website_url": "https://www.aftenposten.no",
+     "political_leaning": "centriste"},
+    {"name": "Sudan Tribune", "country": "Soudan", "region": "Afrique",
+     "language": "anglais", "website_url": "https://www.sudantribune.com",
+     "political_leaning": "indépendant (diaspora)"},
+    {"name": "SANA", "country": "Syrie", "region": "Moyen-Orient, Égypte, Turquie, Israël & GCC",
+     "language": "arabe", "website_url": "https://www.sana.sy",
+     "political_leaning": "officiel (étatique)"},
+    {"name": "El Universal", "country": "Venezuela", "region": "Amérique du Nord & Latine",
+     "language": "espagnol", "website_url": "https://www.eluniversal.com",
+     "political_leaning": "indépendant"},
+    {"name": "Al-Masdar Online", "country": "Yémen", "region": "Moyen-Orient, Égypte, Turquie, Israël & GCC",
+     "language": "arabe", "website_url": "https://www.almasdaronline.com",
+     "political_leaning": "indépendant"},
 ]
 
 
