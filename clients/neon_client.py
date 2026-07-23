@@ -63,7 +63,12 @@ TABLE_COLUMNS = {
     "agences_presses_contents": [
         "name", "category", "country", "specialty", "website_url", "region", "content", "theme", "updated_at",
     ],
-    "daily_reports": ["report_type", "themes"],
+    # created_at explicitement listé (pas seulement un DEFAULT now() côté DDL) :
+    # cette table est écrasée à chaque exécution (voir db/schema.sql), donc
+    # created_at doit refléter la DERNIÈRE génération, pas la toute première —
+    # sinon il resterait figé à l'insert initial sur un DO UPDATE (constaté en
+    # pratique : le contenu se rafraîchissait bien mais la date affichée non).
+    "daily_reports": ["report_type", "themes", "created_at"],
 }
 
 # Colonnes formant la contrainte UNIQUE de chaque table (voir db/schema.sql).

@@ -14,6 +14,7 @@ Enregistré dans daily_reports sous report_type='hotspots' (une ligne, écrasée
 """
 
 import json
+from datetime import datetime, timezone
 
 from clients import joe_agent
 from clients.neon_client import get_connection, upsert_generic
@@ -60,7 +61,10 @@ def run() -> int:
         logger.info("report '%s' : échec de génération ou rejet par le contrôle d'intégrité", REPORT_TYPE)
         return 0
 
-    n = upsert_generic("daily_reports", [{"report_type": REPORT_TYPE, "themes": json.dumps(themes)}])
+    generated_at = datetime.now(timezone.utc).isoformat()
+    n = upsert_generic(
+        "daily_reports", [{"report_type": REPORT_TYPE, "themes": json.dumps(themes), "created_at": generated_at}]
+    )
     logger.info("report '%s' : %d thème(s) généré(s) et enregistré(s)", REPORT_TYPE, len(themes))
     return n
 
