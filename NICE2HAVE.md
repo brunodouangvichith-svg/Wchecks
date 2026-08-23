@@ -43,3 +43,20 @@ Statut : évalué, pas encore installé côté utilisateur.
 Pas de skill Claude Code dédié trouvé pour ces frameworks — l'orchestration
 multi-agents est déjà native à Claude Code (outils `Agent`, `Workflow`,
 MCP), donc pas de besoin identifié de les ajouter à ce projet pour l'instant.
+
+## AEO/GEO — visibilité du contenu dans les réponses IA (SearchFit SEO)
+
+Pertinence limitée pour ce projet (pas de site de contenu à proprement
+parler), mais applicable aux sorties publiques : `README.md`, `docs/index.html`
+et la carte générée par `viz/build_map.py`. Permettrait de s'assurer que ces
+pages sont structurées de façon à être correctement comprises/citées par les
+IA de recherche (ChatGPT, Perplexity, Gemini) si elles sont un jour publiées
+plus largement.
+
+- Plugin Claude **SearchFit SEO** proposé (gratuit à installer) — skills
+  `ai-visibility` (suivi de visibilité dans les réponses IA), `seo-audit`,
+  `content-strategy`, `schema-markup`, `keyword-clustering`.
+- Alternative sans équivalent packagé côté Claude : Surfer SEO, Writesonic,
+  AirOps (SaaS payants, pas de plugin marketplace).
+
+Statut : évalué, pas encore installé côté utilisateur.
