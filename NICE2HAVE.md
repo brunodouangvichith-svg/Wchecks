@@ -60,3 +60,21 @@ plus largement.
   AirOps (SaaS payants, pas de plugin marketplace).
 
 Statut : évalué, pas encore installé côté utilisateur.
+
+## LLM Ops / Observabilité (Langfuse)
+
+Pas spécifique à Wchecks — utile sur tout projet qui appelle des LLM en
+production (tracing des appels, gestion de prompts, évaluation, suivi de
+coût/latence/erreurs). Sans objet ici tant que Wchecks reste un pipeline de
+collecte de données sans couche LLM, mais deviendrait pertinent si on ajoute
+un jour une génération de résumés ou un chatbot RAG dessus.
+
+- Plugin Claude **Langfuse** proposé (gratuit à installer, skill unique
+  `langfuse` couvrant tracing/prompts/évaluation).
+- Langfuse lui-même : open source, self-hosted gratuit, ou cloud avec tier
+  gratuit.
+- Alternatives repérées sans équivalent packagé côté Claude : Arize AI,
+  Helicone, Weights & Biases.
+
+Statut : carte d'installation affichée, pas encore confirmé installé côté
+utilisateur.
