@@ -1,80 +1,63 @@
-# Nice2Have
+# Nice2Have — todo
 
-Idées d'amélioration explorées mais non prioritaires — pas de dette technique,
-juste des pistes pour plus tard. Rien ici n'est planifié ni implémenté.
+Idées d'amélioration explorées mais non prioritaires. Rien ici n'est planifié
+tant que la case n'est pas cochée.
 
 ## Notifications / automatisation de workflow
 
-**Zapier** — plugin Claude officiel (gratuit à installer, MCP + skills
-`zapier-onboard`/`zapier-explore`/`zapier-status`/`zapier-demo`). Permettrait
-de déclencher une action externe (email, Slack, Sheet...) quand un collector
-détecte un événement notable, par exemple : `brent_prices` dépasse un seuil,
-ou `energy_conflicts` remonte un nouvel événement dans une zone surveillée.
+- [ ] ~~Installer le plugin Claude **Zapier**~~ — en pause (skip explicite le
+      2026-08-23)
+- [ ] ~~Connecter **n8n**~~ — en pause avec Zapier. Pas de plugin marketplace,
+      mais open source/gratuit (self-hosted). Deux pistes si on y revient :
+      Claude pilote n8n via le serveur MCP `n8n-mcp`, ou un workflow n8n
+      existant s'expose comme outil MCP ("MCP Server Trigger").
 
-**n8n** — pas de plugin marketplace, mais open source et gratuit
-(self-hosted). Deux directions possibles si on y revient :
-- Claude pilote n8n via le serveur MCP `n8n-mcp` (créer/déclencher des
-  workflows depuis une conversation).
-- Un workflow n8n existant s'expose comme outil MCP (node "MCP Server
-  Trigger") que Claude peut appeler.
+Cas d'usage visé : déclencher une action externe (email, Slack, Sheet...)
+quand un collector détecte un événement notable — ex. `brent_prices` dépasse
+un seuil, ou `energy_conflicts` remonte un nouvel événement dans une zone
+surveillée.
 
-Statut : évalué, mis en pause (skip explicite le 2026-08-23).
+## RAG sur les données collectées
 
-## RAG sur les données collectées (Qdrant)
+- [ ] Installer/activer le plugin Claude **Qdrant** (carte d'installation
+      déjà affichée, gratuit)
+- [ ] Self-héberger Qdrant (`docker run qdrant/qdrant`) ou créer le tier
+      cloud gratuit permanent
+- [ ] Construire le pipeline d'embedding des lignes de `db/schema.sql` (ou de
+      leurs résumés) + réindexation après chaque run de collector
 
-Permettrait de poser des questions en langage naturel sur l'historique
-collecté (prix, dette, conflits, minerais...) sans écrire de requête SQL —
-Claude récupérant les lignes pertinentes de Neon via recherche vectorielle
-avant de répondre.
+But : poser des questions en langage naturel sur l'historique collecté (prix,
+dette, conflits, minerais...) sans écrire de requête SQL.
 
-- Plugin Claude **Qdrant** proposé (gratuit à installer, skills sur hybrid
-  search, qualité de recherche, SDK clients, options de déploiement).
-- Qdrant lui-même : open source (Apache-2.0), self-hosted gratuit
-  (`docker run qdrant/qdrant`) ou tier cloud gratuit permanent
-  (0.5 vCPU / 1 GB RAM / 4 GB disque) — pas de coût obligatoire pour tester.
-- Prérequis pour une vraie intégration RAG : pipeline d'embedding des lignes
-  de `db/schema.sql` (ou de leurs résumés) + réindexation après chaque run
-  de collector.
+## AEO/GEO — visibilité du contenu dans les réponses IA
 
-Statut : évalué, pas encore installé côté utilisateur.
+- [ ] Installer/activer le plugin Claude **SearchFit SEO** (carte
+      d'installation déjà affichée, gratuit)
+- [ ] Auditer `README.md`, `docs/index.html` et la carte générée par
+      `viz/build_map.py` avec le skill `ai-visibility` si ces pages sont un
+      jour publiées plus largement
 
-## Agents IA génériques (LangGraph / CrewAI / LangChain / AgentKit)
+Pertinence limitée pour Wchecks aujourd'hui (pas de site de contenu à
+proprement parler) — à revisiter seulement si publication plus large.
 
-Pas de skill Claude Code dédié trouvé pour ces frameworks — l'orchestration
-multi-agents est déjà native à Claude Code (outils `Agent`, `Workflow`,
-MCP), donc pas de besoin identifié de les ajouter à ce projet pour l'instant.
+## LLM Ops / Observabilité
 
-## AEO/GEO — visibilité du contenu dans les réponses IA (SearchFit SEO)
+- [ ] Installer/activer le plugin Claude **Langfuse** (carte d'installation
+      déjà affichée, gratuit)
+- [ ] Self-héberger Langfuse ou créer un compte cloud (tier gratuit)
 
-Pertinence limitée pour ce projet (pas de site de contenu à proprement
-parler), mais applicable aux sorties publiques : `README.md`, `docs/index.html`
-et la carte générée par `viz/build_map.py`. Permettrait de s'assurer que ces
-pages sont structurées de façon à être correctement comprises/citées par les
-IA de recherche (ChatGPT, Perplexity, Gemini) si elles sont un jour publiées
-plus largement.
+Sans objet pour Wchecks tant qu'il n'y a pas de couche LLM en production —
+utile pour n'importe quel autre projet qui appelle des LLM (tracing, gestion
+de prompts, évaluation, coût/latence/erreurs). À réévaluer si Wchecks ajoute
+un jour une génération de résumés ou un chatbot RAG.
 
-- Plugin Claude **SearchFit SEO** proposé (gratuit à installer) — skills
-  `ai-visibility` (suivi de visibilité dans les réponses IA), `seo-audit`,
-  `content-strategy`, `schema-markup`, `keyword-clustering`.
-- Alternative sans équivalent packagé côté Claude : Surfer SEO, Writesonic,
-  AirOps (SaaS payants, pas de plugin marketplace).
+## Sans suite
 
-Statut : évalué, pas encore installé côté utilisateur.
-
-## LLM Ops / Observabilité (Langfuse)
-
-Pas spécifique à Wchecks — utile sur tout projet qui appelle des LLM en
-production (tracing des appels, gestion de prompts, évaluation, suivi de
-coût/latence/erreurs). Sans objet ici tant que Wchecks reste un pipeline de
-collecte de données sans couche LLM, mais deviendrait pertinent si on ajoute
-un jour une génération de résumés ou un chatbot RAG dessus.
-
-- Plugin Claude **Langfuse** proposé (gratuit à installer, skill unique
-  `langfuse` couvrant tracing/prompts/évaluation).
-- Langfuse lui-même : open source, self-hosted gratuit, ou cloud avec tier
-  gratuit.
-- Alternatives repérées sans équivalent packagé côté Claude : Arize AI,
-  Helicone, Weights & Biases.
-
-Statut : carte d'installation affichée, pas encore confirmé installé côté
-utilisateur.
+- [x] Agents IA génériques (LangGraph / CrewAI / LangChain / AgentKit) — pas
+      de skill Claude Code dédié, et pas de besoin identifié : l'orchestration
+      multi-agents est déjà native à Claude Code (`Agent`, `Workflow`, MCP)
+- [x] AI Tool Stacking (Notion/ClickUp/Highlevel) — pas de plugin dédié
+      packagé ; Airtable a un plugin officiel si le besoin se précise
+- [x] Analyse de données social/web (Google Analytics, Search Console,
+      Socialblade, Analisa.io...) — pas d'équivalent packagé côté Claude,
+      catégorie "lecture de dashboards" plutôt que MCP pilotable
