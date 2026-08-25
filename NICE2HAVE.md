@@ -7,24 +7,36 @@ tant que la case n'est pas cochée.
 
 - [ ] ~~Installer le plugin Claude **Zapier**~~ — en pause (skip explicite le
       2026-08-23)
-- [ ] ~~Connecter **n8n**~~ — en pause avec Zapier. Pas de plugin marketplace,
-      mais open source/gratuit (self-hosted). Deux pistes si on y revient :
-      Claude pilote n8n via le serveur MCP `n8n-mcp`, ou un workflow n8n
-      existant s'expose comme outil MCP ("MCP Server Trigger").
+- [ ] ~~Connecter **n8n**~~ — en pause avec Zapier
 
-Cas d'usage visé : déclencher une action externe (email, Slack, Sheet...)
-quand un collector détecte un événement notable — ex. `brent_prices` dépasse
-un seuil, ou `energy_conflicts` remonte un nouvel événement dans une zone
-surveillée.
+Repris plus tard, dans cet ordre :
+1. Décider quelle direction : Claude pilote n8n (via le serveur MCP
+   `n8n-mcp`, nécessite une instance n8n + clé API) vs. un workflow n8n
+   existant exposé comme outil MCP (node "MCP Server Trigger", nécessite
+   un workflow déjà conçu et une URL webhook publique)
+2. Choisir le déclencheur métier réel : ex. `brent_prices` dépasse un seuil,
+   ou `energy_conflicts` remonte un nouvel événement dans une zone
+   surveillée (Moyen-Orient, Mer Noire, Venezuela, Nigeria, Mer Rouge)
+3. Câbler la notification (email, Slack, Sheet) — via Zapier si réactivé,
+   sinon directement dans le collector concerné
 
 ## RAG sur les données collectées
 
 - [ ] Installer/activer le plugin Claude **Qdrant** (carte d'installation
       déjà affichée, gratuit)
-- [ ] Self-héberger Qdrant (`docker run qdrant/qdrant`) ou créer le tier
-      cloud gratuit permanent
-- [ ] Construire le pipeline d'embedding des lignes de `db/schema.sql` (ou de
-      leurs résumés) + réindexation après chaque run de collector
+- [ ] Self-héberger Qdrant :
+      `docker run -p 6333:6333 -p 6334:6334 -v "$(pwd)/qdrant_storage:/qdrant/storage:z" qdrant/qdrant`
+      — ou créer le tier cloud gratuit permanent (0.5 vCPU / 1 GB RAM / 4 GB
+      disque) si pas envie de gérer l'hébergement
+- [ ] Choisir le modèle d'embedding (dimension du vecteur à fixer dans
+      `create_collection` — ex. 1536 pour `text-embedding-3-small`)
+- [ ] Écrire le script d'indexation : lire les tables de `db/schema.sql` via
+      `neon_client.py`, transformer chaque ligne (ou un résumé) en texte,
+      générer l'embedding, l'upsert dans une collection Qdrant
+- [ ] Décider du déclenchement de la réindexation : après chaque run de
+      collector (`scheduler.py`) ou par un job séparé
+- [ ] Écrire la fonction de recherche (question en langage naturel → vecteur
+      → top-k résultats Qdrant → injectés dans le prompt Claude)
 
 But : poser des questions en langage naturel sur l'historique collecté (prix,
 dette, conflits, minerais...) sans écrire de requête SQL.
@@ -33,23 +45,27 @@ dette, conflits, minerais...) sans écrire de requête SQL.
 
 - [ ] Installer/activer le plugin Claude **SearchFit SEO** (carte
       d'installation déjà affichée, gratuit)
-- [ ] Auditer `README.md`, `docs/index.html` et la carte générée par
-      `viz/build_map.py` avec le skill `ai-visibility` si ces pages sont un
-      jour publiées plus largement
+- [ ] Lancer `seo-audit` sur `README.md` et `docs/index.html`
+- [ ] Lancer `ai-visibility` pour vérifier comment ces pages sont
+      comprises/citées par les IA de recherche (ChatGPT, Perplexity, Gemini)
+- [ ] Générer le `schema-markup` adapté si `docs/index.html` est publié
+      publiquement
 
 Pertinence limitée pour Wchecks aujourd'hui (pas de site de contenu à
-proprement parler) — à revisiter seulement si publication plus large.
+proprement parler) — condition de reprise : publication plus large de
+`docs/index.html` ou de la carte générée.
 
 ## LLM Ops / Observabilité
 
 - [ ] Installer/activer le plugin Claude **Langfuse** (carte d'installation
       déjà affichée, gratuit)
 - [ ] Self-héberger Langfuse ou créer un compte cloud (tier gratuit)
+- [ ] Instrumenter les appels LLM ajoutés au projet (tracing + gestion de
+      prompts + évaluation) une fois qu'il y en a
 
-Sans objet pour Wchecks tant qu'il n'y a pas de couche LLM en production —
-utile pour n'importe quel autre projet qui appelle des LLM (tracing, gestion
-de prompts, évaluation, coût/latence/erreurs). À réévaluer si Wchecks ajoute
-un jour une génération de résumés ou un chatbot RAG.
+Condition de reprise : Wchecks ajoute une couche LLM en production (ex. le
+chatbot RAG ci-dessus, ou une génération de résumés). Sans objet tant que le
+projet reste un pipeline de collecte de données sans LLM.
 
 ## Sans suite
 
