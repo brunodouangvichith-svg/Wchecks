@@ -63,6 +63,7 @@ TABLE_COLUMNS = {
     "agences_presses_contents": [
         "name", "category", "country", "specialty", "website_url", "region", "content", "theme", "updated_at",
     ],
+    "skills": ["content", "content_hash"],
     # created_at explicitement listé (pas seulement un DEFAULT now() côté DDL) :
     # cette table est écrasée à chaque exécution (voir db/schema.sql), donc
     # created_at doit refléter la DERNIÈRE génération, pas la toute première —
@@ -100,6 +101,7 @@ TABLE_CONFLICT_KEYS = {
     "agences_presses": ["name"],
     "agences_presses_contents": ["website_url"],
     "daily_reports": ["report_type"],
+    "skills": ["content_hash"],
 }
 
 # Champ utilisé pour trier "le plus récent d'abord" dans get_latest()/get_history().
@@ -131,6 +133,7 @@ ORDER_FIELD = {
     "agences_presses": "created_at",
     "agences_presses_contents": "created_at",
     "daily_reports": "created_at",
+    "skills": "created_at",
 }
 
 _pool: ConnectionPool | None = None

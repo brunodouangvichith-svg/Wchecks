@@ -9,15 +9,27 @@ sont pas reconnus, le moteur le dit explicitement plutôt que d'inventer une
 réponse plausible.
 """
 
+import hashlib
 import logging
 import re
 from urllib.parse import urlparse
 
 from clients.gdelt_client import ZONE_KEYWORDS
-from clients.neon_client import get_connection
+from clients.neon_client import get_connection, upsert_generic
 from mapping.country_mapping import COUNTRY_NAME_TO_ISO3, country_from_domain
 
 logger = logging.getLogger(__name__)
+
+# Déclenche l'enregistrement d'une nouvelle "skill" (voir _handle_add_skill)
+# plutôt que le dispatch habituel — ex. "ajoute à tes skills cette
+# information : ...". Vérifié EN PREMIER dans answer_question(), avant même
+# "Joe check" : c'est une commande de mémorisation, pas une question sur un
+# pays ou un sujet déjà suivi.
+ADD_SKILL_VERBS = ["ajoute", "ajoutes", "ajouter", "enregistre", "enregistres", "retiens", "mémorise", "memorise"]
+ADD_SKILL_NOUNS = [
+    "skill", "skills", "compétence", "compétences", "competence", "competences",
+    "connaissance", "connaissances",
+]
 
 # Déclenche une recherche libre "Joe check" (voir _handle_joe_check) plutôt que
 # le dispatch habituel pays/dimension — ex. "Joe peux-tu checker le conflit au
@@ -262,6 +274,70 @@ def _handle_joe_check(question: str, limit: int = 8) -> str:
     )
 
 
+def _handle_add_skill(question: str) -> str:
+    """
+    Enregistre une nouvelle "skill" — une connaissance donnée à la main par
+    l'utilisateur en chat (ex. "ajoute à tes skills cette information :
+    ..."), dans la table `skills`. C'est la capacité d'apprentissage au fil
+    de l'eau de l'agent côté conversation : contrairement aux collectors
+    planifiés, ce n'est jamais rafraîchi automatiquement, seulement quand
+    l'utilisateur transmet explicitement une information.
+
+    Le contenu à retenir est tout ce qui suit le PREMIER ":" de la question —
+    si aucun ":" n'est présent, on demande à l'utilisateur de reformuler
+    plutôt que de deviner où s'arrête la commande et où commence
+    l'information à mémoriser.
+
+    Une fois enregistrée, une skill est retrouvée par _search_skills() lors
+    de questions futures dont aucun mot-clé pays/dimension ne rend compte
+    (voir la branche de repli dans answer_question()).
+    """
+    if ":" not in question:
+        return (
+            'Pour ajouter une connaissance, utilisez la forme "ajoute à tes skills cette '
+            'information : <texte à retenir>".'
+        )
+    content = question.split(":", 1)[1].strip()
+    if not content:
+        return "Aucune information à retenir après le « : »."
+
+    content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    upsert_generic("skills", [{"content": content, "content_hash": content_hash}])
+
+    preview = content if len(content) <= 200 else content[:200] + "…"
+    return f"Nouvelle compétence enregistrée : {preview}"
+
+
+def _search_skills(cur, question: str) -> str | None:
+    """
+    Recherche dans les skills enregistrées (voir _handle_add_skill) celle dont
+    le contenu recoupe le plus de mots significatifs de la question — dernier
+    repli de answer_question() quand ni pays ni synthèse globale ne sont
+    reconnus. Reconnaissance par mots-clés comme le reste du moteur (voir le
+    docstring du module), pas de recherche sémantique/LLM.
+
+    Retourne le contenu de la meilleure correspondance (au moins un mot en
+    commun avec la question), ou None si aucune skill n'est enregistrée ou
+    qu'aucune ne recoupe la question.
+    """
+    words = [w for w in re.findall(r"\w+", question.lower()) if w not in _JOE_CHECK_NOISE_WORDS and len(w) > 2]
+    if not words:
+        return None
+
+    cur.execute("SELECT content FROM skills")
+    rows = cur.fetchall()
+    if not rows:
+        return None
+
+    best_content, best_score = None, 0
+    for (content,) in rows:
+        content_lower = content.lower()
+        score = sum(1 for w in words if w in content_lower)
+        if score > best_score:
+            best_content, best_score = content, score
+    return best_content
+
+
 def _handle_debt(cur, iso3: str) -> str | None:
     cur.execute(
         "SELECT annee, dette_pct_pib, dette_montant_milliards_usd FROM country_debt "
@@ -492,8 +568,15 @@ def answer_question(question: str) -> str:
     """
     Répond à une question en langage naturel simple à partir des données Neon.
 
-    "Joe check/vérifie ..." (JOE_CHECK_KEYWORDS) a la PRIORITÉ ABSOLUE, vérifié
-    avant même la recherche de pays : déclenche une recherche libre sur le
+    "Ajoute à tes skills cette information : ..." (ADD_SKILL_VERBS +
+    ADD_SKILL_NOUNS) a la PRIORITÉ ABSOLUE, vérifié avant même "Joe check" :
+    ce n'est pas une question mais une commande de mémorisation (voir
+    _handle_add_skill) — la capacité d'apprentissage au fil de l'eau de
+    l'agent côté conversation, en complément de collect_newspaper_discovery.py
+    qui élargit ses sources automatiquement.
+
+    "Joe check/vérifie ..." (JOE_CHECK_KEYWORDS) vient ensuite, vérifié
+    avant la recherche de pays : déclenche une recherche libre sur le
     sujet mentionné à travers toutes les sources déjà rassemblées par Joe (voir
     _handle_joe_check), pour des requêtes du type "Joe peux-tu checker le
     conflit au détroit d'Ormuz ?" qui ne portent pas forcément sur un pays.
@@ -508,11 +591,14 @@ def answer_question(question: str) -> str:
     autonome des SOURCES individuelles (titre, date, url par événement) plutôt
     qu'un simple comptage. Seulement si AUCUN pays n'est reconnu, les mots-clés de
     synthèse mondiale (GLOBAL_KEYWORDS, ex. "vue d'ensemble", "situation
-    mondiale") déclenchent un aperçu agrégé tous pays confondus. Si ni pays ni
-    synthèse globale ne sont reconnus, le dit explicitement plutôt que d'inventer
-    une réponse.
+    mondiale") déclenchent un aperçu agrégé tous pays confondus. Si ni pays, ni
+    synthèse globale, ni aucune skill enregistrée (_search_skills) ne
+    correspondent, le dit explicitement plutôt que d'inventer une réponse.
     """
     q_lower = question.lower()
+
+    if any(v in q_lower for v in ADD_SKILL_VERBS) and any(n in q_lower for n in ADD_SKILL_NOUNS):
+        return _handle_add_skill(question)
 
     if "joe" in q_lower and any(kw in q_lower for kw in JOE_CHECK_KEYWORDS):
         return _handle_joe_check(question)
@@ -524,6 +610,11 @@ def answer_question(question: str) -> str:
             with get_connection() as conn:
                 with conn.cursor() as cur:
                     return _handle_global_synthesis(cur)
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                skill = _search_skills(cur, question)
+        if skill:
+            return skill
         return (
             "Je n'ai pas reconnu de pays dans votre question. "
             'Essayez par exemple : "quelle est la dette de la France ?" '

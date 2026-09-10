@@ -401,6 +401,19 @@ CREATE TABLE IF NOT EXISTS daily_reports (
     UNIQUE (report_type)
 );
 
+-- Connaissances ajoutées à la main via la commande de chat "ajoute à tes
+-- skills cette information : ..." (voir qa/engine.py, _handle_add_skill) --
+-- apprentissage au fil de l'eau déclenché par l'utilisateur, pas un
+-- collector planifié. content_hash (sha256 du contenu) sert de clé UNIQUE
+-- car content peut dépasser la taille indexable par un TEXT/btree classique.
+CREATE TABLE IF NOT EXISTS skills (
+    id BIGSERIAL PRIMARY KEY,
+    content TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (content_hash)
+);
+
 -- Migration : `updated_at` a été ajouté aux 3 tables de contenu de référence
 -- APRÈS leur création initiale — `CREATE TABLE IF NOT EXISTS` ci-dessus ne
 -- modifie pas une table déjà existante, d'où ces ALTER TABLE explicites
