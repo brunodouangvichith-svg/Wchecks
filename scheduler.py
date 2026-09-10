@@ -51,6 +51,7 @@ from collectors import (
     collect_maritime_traffic,
     collect_military_activity,
     collect_national_newspapers_contents,
+    collect_newspaper_discovery,
     collect_newspapers_angola,
     collect_newspapers_azerbaidjan,
     collect_newspapers_grece,
@@ -128,6 +129,9 @@ JOBS = [
         collect_newspapers_venezuela.run,
     ),
     ("newspapers_yemen", config.FREQUENCIES_MINUTES["newspapers_country_dedicated"], collect_newspapers_yemen.run),
+    # Apprentissage au fil de l'eau de George : élargit national_newspapers
+    # via le LLM plutôt que de rester figé sur la liste saisie à la main.
+    ("newspaper_discovery", config.FREQUENCIES_MINUTES["newspaper_discovery"], collect_newspaper_discovery.run),
     ("report_hotspots", config.FREQUENCIES_MINUTES["report_hotspots"], collect_report_hotspots.run),
     ("report_financial", config.FREQUENCIES_MINUTES["report_financial"], collect_report_financial.run),
 ]

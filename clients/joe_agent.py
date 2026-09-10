@@ -411,3 +411,61 @@ def discover_country_sources(country_name: str) -> list[dict] | None:
     except Exception as exc:
         logger.info("joe_agent: échec de découverte de sources pour '%s' (%s)", country_name, exc)
         return None
+
+
+_DISCOVER_NEWSPAPERS_PROMPT_TEMPLATE = """Pour le pays {country}, une veille suit déjà ces journaux nationaux :
+{known}
+
+Liste jusqu'à 2 AUTRES journaux nationaux majeurs (presse généraliste ou
+économique de référence), différents de ceux ci-dessus, que cette veille ne
+suit pas encore. S'il n'y en a pas d'autre pertinent, réponds par une liste
+vide.
+
+Réponds UNIQUEMENT en JSON, sans texte autour, sous cette forme exacte :
+[{{"name": "...", "language": "...", "website_url": "https://...", "political_leaning": "..."}}]
+
+Donne des URL de HOMEPAGE réelles et stables."""
+
+
+def discover_national_newspapers(country_name: str, known_names: list[str]) -> list[dict] | None:
+    """
+    Demande à Gemini de compléter la liste des journaux nationaux déjà connus
+    pour un pays (voir national_newspapers) — capacité d'apprentissage au fil
+    de l'eau de George (agent "journaux nationaux", pilier 7) : élargir sa
+    couverture au fil du temps plutôt que de rester figé sur
+    data/whitelist/whitelist_journaux.md / scripts/populate_national_newspapers.py.
+
+    Mêmes limites que discover_country_sources (connaissances du modèle, pas
+    une recherche web réelle) : les URL renvoyées sont vérifiées séparément
+    avant d'être enregistrées (voir collectors/collect_newspaper_discovery.py).
+
+    Retourne une liste de dicts {"name", "language", "website_url",
+    "political_leaning"}, ou None si la clé API est absente ou l'appel
+    échoue/renvoie une réponse inexploitable.
+    """
+    if not config.GEMINI_API_KEY:
+        return None
+    try:
+        response = _generate_with_retry(
+            _DISCOVER_NEWSPAPERS_PROMPT_TEMPLATE.format(
+                country=country_name, known=", ".join(known_names) or "(aucun)"
+            ),
+            response_mime_type="application/json",
+        )
+        data = json.loads(response.text)
+        if not isinstance(data, list):
+            return None
+        newspapers = [
+            {
+                "name": d.get("name"),
+                "language": d.get("language"),
+                "website_url": d.get("website_url"),
+                "political_leaning": d.get("political_leaning"),
+            }
+            for d in data
+            if d.get("name") and d.get("website_url") and d.get("name") not in known_names
+        ]
+        return newspapers or None
+    except Exception as exc:
+        logger.info("joe_agent: échec de découverte de nouveaux journaux pour '%s' (%s)", country_name, exc)
+        return None

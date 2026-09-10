@@ -61,6 +61,10 @@ FREQUENCIES_MINUTES = {
     # meme cadence que le sous-agent generique national_newspapers_contents
     # qu'ils remplacent pour ces pays.
     "newspapers_country_dedicated": 24 * 60,
+    # newspaper_discovery : apprentissage au fil de l'eau de George (élargit
+    # national_newspapers via le LLM, voir collect_newspaper_discovery.py) -
+    # même logique que country_sources (change rarement) -> mensuel.
+    "newspaper_discovery": 30 * 24 * 60,
     "risk_score": 6 * 60,
     # 2 sous-agents "rapport journalier" de Joe (voir demande utilisateur) :
     # hotspots de l'actualité mondiale + données financières internationales.
